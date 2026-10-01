@@ -62,7 +62,6 @@ uint8_t dummyFixType = 3;
 // ============================================================================
 void setup() {
 
-  // KORREKTUR: Zuerst den Pin als Ausgang definieren!
   pinMode(LED_BUILTIN, OUTPUT);
 
   // Status-LED 2x kurz blinken lassen (Start-Up)
@@ -112,7 +111,7 @@ void setup() {
 // ============================================================================
 void loop() {
 
-// 1. ECHTE NAZA DATA STREAM VERARBEITUNG (NUR WENN USE_TESTDATA == 0)
+// 1. ECHTE NAZA DATA STREAM VERARBEITUNG
 #if USE_TESTDATA == 0
   while (Serial.available() > 0) {
     uint8_t msgType = naza.decode(Serial.read());
@@ -136,14 +135,12 @@ void loop() {
   }
 #endif
 
-  // KORREKTUR: LED-Puls-Ausschaltkontrolle direkt im loop() platzieren!
-  // Läuft jetzt komplett unabhängig vom 100ms-Intervall und reagiert sofort nach Ablauf der 50ms.
   if (ledPulseStart > 0 && (millis() - ledPulseStart >= LED_PULSE_DURATION)) {
     digitalWrite(LED_BUILTIN, LOW);
     ledPulseStart = 0;
   }
 
-  // 2. TIMED ACTIONS (Intervall-Aktionen)
+  // 2. TIMED ACTIONS
   static uint32_t lastUpdate = 0;
   static uint32_t loopCount = 0;
 
@@ -151,7 +148,7 @@ void loop() {
     lastUpdate = millis();
     loopCount++;
 
-// SIMULATIONS-MODUS (NUR WENN USE_TESTDATA == 1)
+// SIMULATIONS-MODUS
 #if USE_TESTDATA == 1
     float speedVariation = 5.5f + (sin(loopCount / 10.0f) * 0.5f);
     float altVariation = 100.5f + (sin(loopCount / 20.0f) * 5.0f);
@@ -173,7 +170,7 @@ void loop() {
     }
 #endif
 
-// DEBUG-MONITOR AUSGABE (NUR WENN SERIAL_MONITOR == 1)
+// DEBUG-MONITOR AUSGABE
 #if SERIAL_MONITOR == 1
     static uint32_t lastDebug = 0;
     if (millis() - lastDebug >= 500UL) {
