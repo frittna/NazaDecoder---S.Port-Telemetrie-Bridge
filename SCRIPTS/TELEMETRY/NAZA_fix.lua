@@ -1,5 +1,5 @@
 -- LUA Skript für OpenTX/EdgeTX passend zu "NazaSmartPort_Arduino-328P.ino" (mein Nazadecoder zu FrSky S.Port-Sensor Projekt) 
--- um den Hilfswert T1 (über RPM Sensor) zurück in Sats und Gfix zu wandeln welche im FrSky Paket nicht enthalten ist.  @frittna 1.Okt.2026
+-- um den Hilfswert T1 (über RPM Sensor) zurück in Sats und Gfix zu wandeln welche im FrSky Paket nicht enthalten sind.  @frittna 1.Okt.2026
 
 local satSensor = sportTelemetry.getSensor(0x5100) or sportTelemetry.createSensor(0x5100, "Sats", 0)
 local fixSensor = sportTelemetry.getSensor(0x5101) or sportTelemetry.createSensor(0x5101, "GFix", 0)
