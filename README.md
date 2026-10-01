@@ -4,7 +4,7 @@
 
 integriert die GPS- und Magn.-Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
 
-verwendet NazaDecoder Bibliothek https://github.com und FrSkySportTelemetry Bibiliothek https://github.com/marhar/FrSkySportTelemetry
+verwendet NazaDecoder Bibliothek [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) und FrSkySportTelemetry Bibiliothek [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
 
 automatisch gefundene Sensoren: Latitude, Longitude, Altitude, Speed, Heading, Satellites*, FixType*, (keine Zeitstempel, das spart 6 einzelne Sensoren J/M/D/H/M/S)
 
