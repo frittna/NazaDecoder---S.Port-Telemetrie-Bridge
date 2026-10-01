@@ -1,8 +1,6 @@
 // NazaDecoder - S.Port Telemetrie Bridge 
 // Naza-M V1/V2 to FrSky SmartPort - Arduino
 // -> integriert die GPS- und Magn.-Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
-// -> verwendet NazaDecoder Bibliothek [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) und FrSkySportTelemetry Bibiliothek [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
-
 
 #include <Arduino.h>
 // FrSky SmartPort Bibliotheken
@@ -49,20 +47,23 @@ float dummyAltitude = 100.5f;
 float dummySpeed = 5.5f;
 float dummyCourse = 45.0f;
 float dummyVertSpeed = 1.2f;
-//uint8_t dummyYear = 26;
-//uint8_t dummyMonth = 9;
-//uint8_t dummyDay = 26;
-//uint8_t dummyHour = 14;
-//uint8_t dummyMinute = 35;
-//uint8_t dummySecond = 0;
-//uint8_t dummySatellites = 9;
-//uint8_t dummyFixType = 3;
+uint8_t dummyYear = 26;
+uint8_t dummyMonth = 9;
+uint8_t dummyDay = 26;
+uint8_t dummyHour = 14;
+uint8_t dummyMinute = 35;
+uint8_t dummySecond = 0;
+uint8_t dummySatellites = 9;
+uint8_t dummyFixType = 3;
 #endif
 
 // ============================================================================
 // SETUP
 // ============================================================================
 void setup() {
+
+  // KORREKTUR: Zuerst den Pin als Ausgang definieren!
+  pinMode(LED_BUILTIN, OUTPUT);
 
   // Status-LED 2x kurz blinken lassen (Start-Up)
   digitalWrite(LED_BUILTIN, HIGH);
@@ -72,15 +73,12 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(130);
   digitalWrite(LED_BUILTIN, LOW);
-  delay(1000);
+  delay(500); // Kürzere Pause nach dem Startblinken
 
-  pinMode(LED_BUILTIN, OUTPUT);
-
-  // Initialisiert die serielle Hardware-Schnittstelle für beide Modi gleich (115200 Baud)
+  // Initialisiert die serielle Hardware-Schnittstelle (115200 Baud)
   Serial.begin(115200);
   delay(500);
 
-// Serieller Text wird NUR kompiliert, wenn wir im Testmodus sind
 #if SERIAL_DEBUG == 1
   Serial.println();
   Serial.println(F("========================================="));
@@ -93,10 +91,7 @@ void setup() {
   Serial.println();
 #endif
 
-  /*
-   * SmartPort ohne eigenes Polling starten
-   * Registriert GPS, Vario und den RPM-Sensor für T1/T2 Daten
-   */
+  // SmartPort initialisieren
   telemetry.begin(
     FrSkySportSingleWireSerial::SOFT_SERIAL_PIN_7,
     &gpsSensor,
@@ -105,15 +100,9 @@ void setup() {
 
 #if SERIAL_DEBUG == 1
   Serial.println(F("SmartPort erfolgreich initialisiert!"));
-  Serial.println(F("Test-Daten werden vorinitialisiert:"));
-  Serial.print(F("  Lat="));
-  Serial.print(dummyLatitude, 6);
-  Serial.print(F(" Lon="));
-  Serial.println(dummyLongitude, 6);
   Serial.println();
 #else
-  // Wenn Live-Daten aktiv sind, leeren wir den TX-Puffer vor dem Start,
-  // damit keine Reste den Naza-Stream stören.
+  // Wenn Live-Daten aktiv sind, leeren wir den TX-Puffer
   Serial.flush();
 #endif
 }
@@ -127,21 +116,16 @@ void loop() {
 #if USE_TESTDATA == 0
   while (Serial.available() > 0) {
     uint8_t msgType = naza.decode(Serial.read());
-    // VERSION MIT ZEITSTEMPEL
-    // if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
-    //   gpsSensor.setData(
-    //     naza.getLatitude(),   naza.getLongitude(), naza.getAltitude(),
-    //     naza.getSpeed(),      naza.getHeading(),   naza.getYear(),
-    //     naza.getMonth(),      naza.getDay(),       naza.getHour(),
-    //     naza.getMinute(),     naza.getSecond());
-    // VERSION OHNE ZEITSTEMPEL
+
     if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
       gpsSensor.setData(
         naza.getLatitude(), naza.getLongitude(), naza.getAltitude(),
         naza.getSpeed(), naza.getHeading(),
         0, 0, 0, 0, 0, 0);
-      //Hilfswert T1 für Sats und Gfix
+
       varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
+      
+      // Hilfswert T1 für Sats und GFix berechnen
       uint32_t satFixData = (naza.getSatellites() * 10) + (uint8_t)naza.getFixType();
       rpmSensor.setData(0, (float)satFixData, 0.0f);
 
@@ -152,19 +136,20 @@ void loop() {
   }
 #endif
 
-  // 2. TIMED ACTIONS (Blinken & Testdaten-Generierung)
+  // KORREKTUR: LED-Puls-Ausschaltkontrolle direkt im loop() platzieren!
+  // Läuft jetzt komplett unabhängig vom 100ms-Intervall und reagiert sofort nach Ablauf der 50ms.
+  if (ledPulseStart > 0 && (millis() - ledPulseStart >= LED_PULSE_DURATION)) {
+    digitalWrite(LED_BUILTIN, LOW);
+    ledPulseStart = 0;
+  }
+
+  // 2. TIMED ACTIONS (Intervall-Aktionen)
   static uint32_t lastUpdate = 0;
   static uint32_t loopCount = 0;
 
   if (millis() - lastUpdate >= 100UL) {
     lastUpdate = millis();
     loopCount++;
-
-    // LED-Puls beenden (wenn aktiv und Zeit abgelaufen)
-    if (ledPulseStart > 0 && millis() - ledPulseStart >= LED_PULSE_DURATION) {
-      digitalWrite(LED_BUILTIN, LOW);
-      ledPulseStart = 0;
-    }
 
 // SIMULATIONS-MODUS (NUR WENN USE_TESTDATA == 1)
 #if USE_TESTDATA == 1
@@ -181,8 +166,8 @@ void loop() {
     uint32_t testSatFix = (dummySatellites * 10) + dummyFixType;
     rpmSensor.setData(0, (float)testSatFix, 0.0f);
 
-    // LED-Puls starten (Test-Daten generiert)
-    if (ledPulseStart == 0) {  // Nur wenn gerade kein Puls aktiv ist
+    // LED-Puls starten im Testmodus (falls nicht aktiv)
+    if (ledPulseStart == 0) {
       digitalWrite(LED_BUILTIN, HIGH);
       ledPulseStart = millis();
     }
@@ -206,6 +191,6 @@ void loop() {
 #endif
   }
 
-  // Telemetrie an Empfänger senden (muss permanent laufen)
+  // Telemetrie an Empfänger senden (muss permanent und ungedrosselt laufen)
   telemetry.send();
 }
