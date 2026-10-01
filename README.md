@@ -12,7 +12,7 @@
 
 Die Satellitenanzahl und GPSFix-Type werden hier kombiniert in einem Hilfswert des RPM Sensors übertragen. zb: T1 = 113 bedeutet 11 Sats(die 11) + 3DFix(die 3)
 
-Um am Sender den Wert T1 wieder schön in zwei Werte zu trennen kann man, wenn man will, mein Script in `SCRIPTS\TELEMETRY\NAZA_fix.lua` nutzen. Dieses trennt T1 zurück in "Sats" und "Gfix". T1 muss in der Sensorenliste als Basis verbleiben. RPM kann gelöscht werden.
+Um am Sender den Wert T1 wieder schön in zwei Werte zu trennen kann man, wenn man will, mein Script in `SCRIPTS\FUNCTIONS\NAZA_fix.lua` nutzen. Dieses trennt T1 zurück in "Sats" und "Gfix". T1 muss in der Sensorenliste als Basis verbleiben. RPM kann gelöscht werden.
 
 Das ganze macht man deshalb weil die zwei Werte sonst fehlen würden weil sie nicht im FrSky-GPS-Paket enthalten sind.
 So aber werden sie automatisch bei Sensorsuche vom Sender gepollt und gefunden. RPM-Sensor deshalb, weil dieser T1 Rohwerte ohne feste Einheit mitsenden kann.
