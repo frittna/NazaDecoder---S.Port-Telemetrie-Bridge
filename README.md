@@ -27,7 +27,7 @@ In meinem Fall:
 
 - Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
 - ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
-- Der Atmega283P hat nur EINE serielle Schnittstelle, aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
+- Der Atmega328P hat nur EINE serielle Schnittstelle. Aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
 
 ### Anschlüsse
 
