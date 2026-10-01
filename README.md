@@ -1,6 +1,6 @@
 # NazaDecoder - S.Port Telemetrie Bridge 
 
-## Naza-M V1/V2 to FrSky SmartPort with Arduino
+## Naza-M V1/V2 to FrSky SmartPort - Arduino
 
 -> integriert die GPS- und Magn.-Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
 
