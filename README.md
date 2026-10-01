@@ -25,13 +25,15 @@ So aber werden sie automatisch bei Sensorsuche vom Sender gepollt und gefunden. 
 
 In meinem Fall:
 
-- Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
-- ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
-- Der Atmega328P hat nur EINE serielle Schnittstelle. Aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
-
 ### Anschlüsse
 
 - Atmega328P Pin PD7: über R1k Widerstand zu SmartPort Leitung führen ("CH3 In THRO" auf meinem S-OSD Modul)
 - Atmega328P Pin PD0: Serial-RX-Pin (PD0 / RX) zum NAZA<->GPS Kabel-TX führen (Pin 2 orange, neben 1 GND schwarz).
 - optional: sicherheitshalber habe ich einen 3.3V zu 5V Pegelwandler für das serielle GPS-RX-Signal(3.3V) zum Arduino(5V) eingebaut.
 - 1x Status LED (gültiges Paket): Atmega328P Pin 9 (am S-OSD Modul: "F1-In"-PIN mit LED-Vorwiderstand über LED und nach Masse führen)
+
+- Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
+- ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
+- Der Atmega283P hat nur EINE serielle Schnittstelle, aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
+
+
