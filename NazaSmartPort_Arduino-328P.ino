@@ -47,12 +47,12 @@ float dummyAltitude = 100.5f;
 float dummySpeed = 5.5f;
 float dummyCourse = 45.0f;
 float dummyVertSpeed = 1.2f;
-uint8_t dummyYear = 26;
-uint8_t dummyMonth = 9;
-uint8_t dummyDay = 26;
-uint8_t dummyHour = 14;
-uint8_t dummyMinute = 35;
-uint8_t dummySecond = 0;
+//uint8_t dummyYear = 26;
+//uint8_t dummyMonth = 9;
+//uint8_t dummyDay = 26;
+//uint8_t dummyHour = 14;
+//uint8_t dummyMinute = 35;
+//uint8_t dummySecond = 0;
 uint8_t dummySatellites = 9;
 uint8_t dummyFixType = 3;
 #endif
@@ -119,8 +119,7 @@ void loop() {
     if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
       gpsSensor.setData(
         naza.getLatitude(), naza.getLongitude(), naza.getAltitude(),
-        naza.getSpeed(), naza.getHeading(),
-        0, 0, 0, 0, 0, 0);
+        naza.getSpeed(), naza.getHeading(), 0, 0, 0, 0, 0, 0);
 
       varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
       
@@ -155,9 +154,12 @@ void loop() {
     float vertSpeedVariation = 1.2f + (cos(loopCount / 15.0f) * 0.3f);
 
     gpsSensor.setData(
-      dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse,
-      dummyYear, dummyMonth, dummyDay, dummyHour, dummyMinute, dummySecond);
+      dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse);
 
+//    gpsSensor.setData(
+//      dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse,
+//      dummyYear, dummyMonth, dummyDay, dummyHour, dummyMinute, dummySecond);
+    
     varioSensor.setData(altVariation, vertSpeedVariation);
 
     uint32_t testSatFix = (dummySatellites * 10) + dummyFixType;
