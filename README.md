@@ -21,7 +21,7 @@ So aber werden sie automatisch bei Sensorsuche vom Sender gepollt und gefunden. 
 
 - Arduino mit ATMega328P 5V (hier in Form eines zweckentfremdeten alten S-OSD/iOSD Moduls mit 328P, es wird aber mehr oder weniger mit jedem Arduino 328P/328PB laufen)
 - Es wird nur ein HW-Serial Eingang für das GPS-Singal und ein SW-Serial Port Ausgang für die SPort übertragung gebraucht. Evtl. ein LED-Ausgang.
-- Somit ist bei anderer Hardware nur die Pinbelegung des Ein-/Ausgangs anzupassen und evtl. die Einstellungen für den Programmer in Arduino bzw beforzugte Art es zu flashen.
+- Somit ist bei anderer Hardware nur die Pinbelegung des Ein-/Ausgangs anzupassen und evtl. die Einstellungen für den Programmer in Arduino bzw bevorzugte Art es zu flashen.
 
 In meinem Fall:
 
