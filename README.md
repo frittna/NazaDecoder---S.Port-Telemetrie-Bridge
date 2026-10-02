@@ -9,8 +9,8 @@
 
 -> automatisch gefundene Sensoren: Latitude, Longitude, Altitude, Speed, Heading, Satellites*, FixType*, (keine Zeitstempel, das spart 6 relativ unnötige Sensoren J/M/D/H/M/S)
 
-*)Die Satellitenanzahl und GPSFix-Type welche im FrSky GPS-Paket nicht vorgesehen sind werden mit Hilfswerten des Standartsensors ASS-Airspeed/Custom T1+T2 übertragen. 
-AirSpeed selbst kann später gelöscht werden. T1+tT2 in "Sats" und GFix" umbenennen.
+*)Die Satellitenanzahl und GPSFix-Type welche im FrSky GPS-Paket nicht vorgesehen sind werden mit Hilfswerten des Standartsensors RPM (enthält auch T1+T2) übertragen. 
+RPM selbst kann später gelöscht werden. T1+tT2 einfach in "Sats" und GFix" umbenennen.
 
 ### Hardware
 
