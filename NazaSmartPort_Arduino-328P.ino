@@ -14,6 +14,7 @@
 #include <NazaDecoder.h>
 
 // Status LED
+#undef LED_BUILTIN
 #define LED_BUILTIN 9
 
 // ============================================================================
@@ -47,12 +48,6 @@ float dummyAltitude = 100.5f;
 float dummySpeed = 5.5f;
 float dummyCourse = 45.0f;
 float dummyVertSpeed = 1.2f;
-//uint8_t dummyYear = 26;
-//uint8_t dummyMonth = 9;
-//uint8_t dummyDay = 26;
-//uint8_t dummyHour = 14;
-//uint8_t dummyMinute = 35;
-//uint8_t dummySecond = 0;
 uint8_t dummySatellites = 9;
 uint8_t dummyFixType = 3;
 #endif
@@ -72,7 +67,7 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(130);
   digitalWrite(LED_BUILTIN, LOW);
-  delay(500); // Kürzere Pause nach dem Startblinken
+  delay(500); 
 
   // Initialisiert die serielle Hardware-Schnittstelle (115200 Baud)
   Serial.begin(115200);
@@ -123,9 +118,9 @@ void loop() {
 
       varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
       
-      // Hilfswert T1 für Sats und GFix berechnen
-      uint32_t satFixData = (naza.getSatellites() * 10) + (uint8_t)naza.getFixType();
-      rpmSensor.setData(0, (float)satFixData, 0.0f);
+      // Über den RPM-Sensor die Daten an T1 und T2 übergeben:
+      // Parameter: setData(rpm, t1, t2)
+      rpmSensor.setData(0, (float)naza.getSatellites(), (float)naza.getFixType());
 
       // LED-Puls starten (GPS-Paket empfangen)
       digitalWrite(LED_BUILTIN, HIGH);
@@ -155,15 +150,11 @@ void loop() {
 
     gpsSensor.setData(
       dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse);
-
-//    gpsSensor.setData(
-//      dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse,
-//      dummyYear, dummyMonth, dummyDay, dummyHour, dummyMinute, dummySecond);
     
     varioSensor.setData(altVariation, vertSpeedVariation);
 
-    uint32_t testSatFix = (dummySatellites * 10) + dummyFixType;
-    rpmSensor.setData(0, (float)testSatFix, 0.0f);
+    // Simulation über RPM-Sensor für T1 und T2 Daten
+    rpmSensor.setData(0, (float)dummySatellites, (float)dummyFixType);
 
     // LED-Puls starten im Testmodus (falls nicht aktiv)
     if (ledPulseStart == 0) {
@@ -180,9 +171,9 @@ void loop() {
 
       Serial.print(F("[TEST] Alt="));
       Serial.print(100.5f + (sin(loopCount / 20.0f) * 5.0f), 1);
-      Serial.print(F("m | Satelliten="));
+      Serial.print(F("m | Satelliten (T1)="));
       Serial.print(dummySatellites);
-      Serial.print(F(" | Fix="));
+      Serial.print(F(" | Fix (T2)="));
       Serial.print(dummyFixType);
       Serial.print(F(" | Loops="));
       Serial.println(loopCount);
