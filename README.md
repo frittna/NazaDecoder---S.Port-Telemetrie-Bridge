@@ -1,21 +1,16 @@
-# NazaDecoder - S.Port Telemetrie Bridge 
+# NazaDecoder - S.Port Telemetrie Bridge
 
 ## Naza-M V1/V2 to FrSky SmartPort - Arduino
-
+-  source code: [frittna/NazaDecoder---S.Port-Telemetrie-Bridge](https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge)  @ 2.Okt.2026 
+  
 -> integriert die GPS- und Magn.-Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
 
 -> verwendet NazaDecoder Bibliothek [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) und FrSkySportTelemetry Bibiliothek [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
 
--> automatisch gefundene Sensoren: Latitude, Longitude, Altitude, Speed, Heading, Satellites*, FixType*, (keine Zeitstempel, das spart 6 einzelne Sensoren J/M/D/H/M/S)
+-> automatisch gefundene Sensoren: Latitude, Longitude, Altitude, Speed, Heading, Satellites*, FixType*, (keine Zeitstempel, das spart 6 relativ unnötige Sensoren J/M/D/H/M/S)
 
-### *)Erklärung zu Satellites & FixType
-
-Die Satellitenanzahl und GPSFix-Type werden hier kombiniert in einem Hilfswert des RPM Sensors übertragen. zb: T1 = 113 bedeutet 11 Sats(die 11) + 3DFix(die 3)
-
-Um am Sender den Wert T1 wieder schön in zwei Werte zu trennen kann man, wenn man will, mein Script in `SCRIPTS\FUNCTIONS\NAZA_fix.lua` nutzen. Dieses trennt T1 zurück in "Sats" und "Gfix". T1 muss in der Sensorenliste als Basis verbleiben. RPM kann gelöscht werden.
-
-Das ganze macht man deshalb weil die zwei Werte sonst fehlen würden weil sie nicht im FrSky-GPS-Paket enthalten sind.
-So aber werden sie automatisch bei Sensorsuche vom Sender gepollt und gefunden. RPM-Sensor deshalb, weil dieser T1 Rohwerte ohne feste Einheit mitsenden kann.
+*)Die Satellitenanzahl und GPSFix-Type welche im FrSky GPS-Paket nicht vorgesehen sind werden mit Hilfswerten des Standartsensors ASS-Airspeed/Custom T1+T2 übertragen. 
+AirSpeed selbst kann später gelöscht werden. T1+tT2 in "Sats" und GFix" umbenennen.
 
 ### Hardware
 
@@ -23,10 +18,9 @@ So aber werden sie automatisch bei Sensorsuche vom Sender gepollt und gefunden. 
 - Es wird nur ein HW-Serial Eingang für das GPS-Singal und ein SW-Serial Port Ausgang für die SPort übertragung gebraucht. Evtl. ein LED-Ausgang.
 - Somit ist bei anderer Hardware nur die Pinbelegung des Ein-/Ausgangs anzupassen und evtl. die Einstellungen für den Programmer in Arduino bzw bevorzugte Art es zu flashen.
 
-In meinem Fall:
-
 ### Anschlüsse
 
+  In meinem Fall:
 - Atmega328P Pin PD7: über R1k Widerstand zu SmartPort Leitung führen ("CH3 In THRO" auf meinem S-OSD Modul)
 - Atmega328P Pin PD0: Serial-RX-Pin (PD0 / RX) zum NAZA<->GPS Kabel-TX führen (Pin 2 orange, neben 1 GND schwarz).
 - optional: sicherheitshalber habe ich einen 3.3V zu 5V Pegelwandler für das serielle GPS-RX-Signal(3.3V) zum Arduino(5V) eingebaut.
