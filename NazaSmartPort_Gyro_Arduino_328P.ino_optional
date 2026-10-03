@@ -4,7 +4,7 @@
 // *über RPM und ASS Sensor (ACCSensor ist in der FrSkySport Library leider so nicht vorhanden, es gibt ihn nativ schon , Archer SR Empänger..)
 
 #include <Arduino.h>
-#include <Wire.h> // Für MPU-6000 I2C-Kommunikation
+#include <Wire.h> // Für MPU-6000 I2C-Kommunikation  (SDA/SCL beim 328p sind die Pins 27/28 bzw. PC4/PC5 bzw. A4/A5 in Arduino !)
 // FrSky SmartPort Bibliotheken
 #include <FrSkySportSensor.h>
 #include <FrSkySportSensorGps.h>
@@ -128,7 +128,277 @@ void setup() {
   Serial.println();
 #endif
 
-  // I2C für MPU-6000 initialisieren (Pins A4/A5 beim 328p)
+  // I2C für MPU-6000 initialisieren
+  Wire.begin();
+  Wire.setClock(400000); 
+
+  // MPU-6000 aufwecken
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B); 
+  Wire.write(0);    
+  Wire.endTransmission(true);
+
+  // SmartPort mit dem echten Lagesensor-Objekt initialisieren
+  telemetry.begin(
+    FrSkySportSingleWireSerial::SOFT_SERIAL_PIN_7,
+    &gpsSensor,
+    &varioSensor,
+    &rpmSensor,
+    &gyroSensor);
+
+  lastFilterTime = millis();
+
+#if SERIAL_DEBUG == 1
+  Serial.println(F("SmartPort erfolgreich initialisiert!"));
+  Serial.println();
+#else
+  // Wenn Live-Daten aktiv sind, leeren wir den TX-Puffer
+  Serial.flush();
+#endif
+}
+
+// ============================================================================
+// HAUPTSCHLEIFE
+// ============================================================================
+void loop() {
+
+// 1. ECHTE NAZA DATA STREAM VERARBEITUNG
+#if USE_TESTDATA == 0
+  while (Serial.available() > 0) {
+    uint8_t msgType = naza.decode(Serial.read());
+
+    if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
+      gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(),naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(),naza.getHour(), naza.getMinute(), naza.getSecond());
+      varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
+      rpmSensor.setData(0, (float)naza.getSatellites(), (float)naza.getFixType());
+
+      // LED-Puls starten (GPS-Paket empfangen)
+      digitalWrite(LED_BUILTIN, HIGH);
+      ledPulseStart = millis();
+    }
+  }
+#endif
+
+  if (ledPulseStart > 0 && (millis() - ledPulseStart >= LED_PULSE_DURATION)) {
+    digitalWrite(LED_BUILTIN, LOW);
+    ledPulseStart = 0;
+  }
+
+  // 2. TIMED ACTIONS (100ms / 10 Hz)
+  static uint32_t lastUpdate = 0;
+  static uint32_t loopCount = 0;
+
+  if (millis() - lastUpdate >= 100UL) {
+    uint32_t currentTime = millis();
+    float dt = (float)(currentTime - lastFilterTime) / 1000.0f; 
+    lastFilterTime = currentTime;
+    lastUpdate = currentTime;
+    loopCount++;
+
+    // --- MPU-6000 LAGEBERECHNUNG ---
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x3B); 
+    Wire.endTransmission(false);
+    
+    Wire.requestFrom(MPU_ADDR, 14, true); 
+    if (Wire.available() >= 14) {
+      int16_t accRawX  = (Wire.read() << 8) | Wire.read();
+      int16_t accRawY  = (Wire.read() << 8) | Wire.read();
+      int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
+      int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
+      int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
+      int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
+      int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
+
+      // Absolute Neigungswinkel über Trigonometrie berechnen
+      float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
+      float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
+
+      float gyroRateX = (float)gyroRawX / 131.0f;
+      float gyroRateY = (float)gyroRawY / 131.0f;
+
+      // Komplementärfilter (96% Gyro + 4% Accel-Bodenvektor)
+      anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
+      angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
+
+      // Füttert selbstgeschriebenen ACC-Lagekanal
+      gyroSensor.setData(anglePitch, angleRoll, 0.0f); 
+    }
+
+// SIMULATIONS-MODUS
+#if USE_TESTDATA == 1
+    float speedVariation = 5.5f + (sin(loopCount / 10.0f) * 0.5f);
+    float altVariation = 100.5f + (sin(loopCount / 20.0f) * 5.0f);
+    float vertSpeedVariation = 1.2f + (cos(loopCount / 15.0f) * 0.3f);
+
+    //GPS-Daten inklusive Dummy-Zeitstempeln senden
+    gpsSensor.setData(
+      dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse,
+      dummyYear, dummyMonth, dummyDay, dummyHour, dummyMinute, dummySecond);
+    varioSensor.setData(altVariation, vertSpeedVariation);
+
+    // Simulation über RPM-Sensor für T1 und T2 Daten
+    rpmSensor.setData(0, (float)dummySatellites, (float)dummyFixType);
+
+    // LED-Puls starten im Testmodus (falls nicht aktiv)
+    if (ledPulseStart == 0) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      ledPulseStart = millis();
+    }
+#endif
+
+// DEBUG-MONITOR AUSGABE
+#if SERIAL_MONITOR == 1
+    static uint32_t lastDebug = 0;
+    if (millis() - lastDebug >= 500UL) {
+      lastDebug = millis();
+
+      Serial.print(F("[TEST] Alt="));
+      Serial.print(100.5f + (sin(loopCount / 20.0f) * 5.0f), 1);
+      Serial.print(F("m | Satelliten (T1)="));
+      Serial.print(dummySatellites);
+      Serial.print(F(" | Fix (T2)="));
+      Serial.print(dummyFixType);
+      Serial.print(F(" | Loops="));
+      Serial.println(loopCount);
+    }
+#endif
+  }
+
+  // Telemetrie an Empfänger senden (muss permanent und ungedrosselt laufen)
+  telemetry.send();
+}
+// NazaDecoder - S.Port Telemetrie Bridge mit MPU6000/MPU6050 Gyro-Chip integraton für Lageposition zusätzlich*
+// Naza-M V1/V2 to FrSky SmartPort - Arduino
+// -> integriert die GPS- und Lagedaten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
+// *über RPM und ASS Sensor (ACCSensor ist in der FrSkySport Library leider so nicht vorhanden, es gibt ihn nativ schon , Archer SR Empänger..)
+
+#include <Arduino.h>
+#include <Wire.h> // Für MPU-6000 I2C-Kommunikation  (SDA/SCL beim 328p sind die Pins 27/28 bzw. PC4/PC5 bzw. A4/A5 in Arduino !)
+// FrSky SmartPort Bibliotheken
+#include <FrSkySportSensor.h>
+#include <FrSkySportSensorGps.h>
+#include <FrSkySportSensorVario.h>
+#include <FrSkySportSensorRpm.h> 
+#include <FrSkySportTelemetry.h>
+#include <FrSkySportSingleWireSerial.h>
+// NazaDecoder Bibliothek
+#include <NazaDecoder.h>
+
+// Status LED
+#undef LED_BUILTIN
+#define LED_BUILTIN 9
+
+#define MPU_ADDR 0x68 // I2C-Adresse der MPU-6000
+
+// ============================================================================
+// SELBSTGEBAUTE NATIVE ACC-SENSORKLASSE
+// ============================================================================
+class FrSkySportSensorAccCustom : public FrSkySportSensor {
+  public:
+    FrSkySportSensorAccCustom() : FrSkySportSensor((FrSkySportSensor::SensorId)0x1B) {
+      data = 0;
+    }
+    
+    void setData(float accX, float accY, float accZ) {
+      // Wandelt die Grad-Werte in das standardisierte FrSky-ACC-Format um
+      // 0x0700 ist die offizielle Anwendungs-ID (Application ID) für Beschleunigung/Horizont
+      data = (((int32_t)(accX * 100.0f)) & 0x0000FFFF) | ((((int32_t)(accY * 100.0f)) << 16) & 0xFFFF0000);
+    }
+    
+    virtual uint16_t send(FrSkySportSingleWireSerial& serial, uint8_t id, uint32_t now) {
+      if(id == sensorId) {
+        // Schickt Datenpaket für den Horizont ab (0x0700 = ACC ID)
+        serial.sendData(0x0700, data);
+        return 0x0700; // Meldet Hauptbibliothek die erfolgreiche Übertragung
+      }
+      return 0; // Nicht an der Reihe
+    }
+  private:
+    uint32_t data;
+};
+
+// ============================================================================
+// COMPILER-SCHALTER FÜR DIE SERIELLE SCHNITTSTELLE / SIMULATION
+// ============================================================================
+// GPS Live Data aktiv:     0 = Live-Daten vom Naza1   1 = nur künstliche Dummy-Daten
+#define USE_TESTDATA 0  //default:0
+// Serial-Monitor Ausgabe:  0 = aus   1 = ein
+#define SERIAL_MONITOR 0  //default:0 (WENN GPS AN IST GEHT KEIN SERIAL UND UMGEKEHRT, DA NUR 1 ECHTE UART VORHANDEN!)
+// ============================================================================
+// OBJEKTE
+// ============================================================================
+FrSkySportSensorGps gpsSensor;
+FrSkySportSensorVario varioSensor;
+FrSkySportSensorRpm rpmSensor;
+FrSkySportSensorAccCustom gyroSensor; // selbstgebauter, ACC-Sensor
+
+FrSkySportTelemetry telemetry;
+NazaDecoder naza;
+
+// LED-Puls-Steuerung (GLOBAL)
+static uint32_t ledPulseStart = 0;
+static const uint32_t LED_PULSE_DURATION = 50UL;  // 50ms
+
+// Variablen für Lageberechnung
+float anglePitch = 0.0f;
+float angleRoll  = 0.0f;
+uint32_t lastFilterTime = 0;
+
+// ============================================================================
+// DUMMY-TEST-DATEN
+// ============================================================================
+#if USE_TESTDATA == 1
+float dummyLatitude = 48.8584f;
+float dummyLongitude = 2.2945f;
+float dummyAltitude = 100.5f;
+float dummySpeed = 5.5f;
+float dummyCourse = 45.0f;
+float dummyVertSpeed = 1.2f;
+uint8_t dummySatellites = 9;
+uint8_t dummyFixType = 3;
+uint8_t dummyYear = 26;
+uint8_t dummyMonth = 9;
+uint8_t dummyDay = 26;
+uint8_t dummyHour = 14;
+uint8_t dummyMinute = 35;
+uint8_t dummySecond = 0;
+#endif
+
+// ============================================================================
+// SETUP
+// ============================================================================
+void setup() {
+
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  // Status-LED 2x kurz blinken lassen (Start-Up)
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(130);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(130);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(130);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500); 
+
+  // Initialisiert serielle Hardware-Schnittstelle (115200 Baud)
+  Serial.begin(115200);
+  delay(500);
+
+#if SERIAL_DEBUG == 1
+  Serial.println();
+  Serial.println(F("========================================="));
+  Serial.println(F(" NazaDecoder SmartPort"));
+  Serial.println(F(" -> MODUS: DUMMY-TESTDATEN AKTIV <-"));
+  Serial.println(F("========================================="));
+  Serial.println();
+  Serial.println(F("SmartPort wird initialisiert ..."));
+  Serial.println(F("Pin 7 (Software-Halbduplex)"));
+  Serial.println();
+#endif
+
+  // I2C für MPU-6000 initialisieren
   Wire.begin();
   Wire.setClock(400000); 
 
