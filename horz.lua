@@ -1,3 +1,6 @@
+HAS ERRORS   !!!!
+
+
 -- Künstlicher Horizont für FrSky Sensoren und QX7 (EdgeTX 2.10 BW)
 
 local invPitch = 0
