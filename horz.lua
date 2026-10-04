@@ -1,6 +1,3 @@
-HAS ERRORS   !!!!
-
-
 -- Künstlicher Horizont für FrSky Sensoren und QX7 (EdgeTX 2.10 BW)
 
 local invPitch = 0
@@ -153,7 +150,7 @@ local function run(event)
     local alt   = getValue("GAlt") or getValue("Alt") or 0
     local rssi  = getValue("RSSI") or 0
     local sats  = getValue("Tmp1") or getValue("Sats") or 0
-    local cels = getValue("Cels") or 0
+    local cels  = getValue("Cels") or 0
     local cmin  = getValue("cell-min") or 0 
     local gfix  = getValue("Tmp2") or 0
     local amp   = getValue("Curr") or 0
@@ -181,10 +178,13 @@ local function run(event)
     local dy = math.sin(rollAngle) * (sizeW - 1)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     
-    -- Höhen-Wert alle 5m als Strich am linken inneren Rand der Box
-    local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
-    if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
-        lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
+    -- ABSTURZ-SCHUTZ 1: Höhen-Wert alle 5m als Strich am linken inneren Rand der Box
+    -- Wird nur berechnet, wenn die Werte mathematisch gültig sind
+    if alt and sizeH and sizeH > 0 then
+        local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
+        if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
+            lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
+        end
     end
 
     -- Sats als S: links oben in Box
@@ -197,25 +197,28 @@ local function run(event)
 
     -- Fluglagewinkel Y und X IN die Box links und rechts mittig legen
     lcd.drawText(cx - sizeW + 2, cy +20, "Y:" .. string.format("%.0f", pitch), SMLSIZE)
-    lcd.drawText(cx + sizeW - 17, cy +20, "X:" .. string.format("%.0f", roll), SMLSIZE)
+    lcd.drawText(cx + sizeW - 18, cy +20, "X:" .. string.format("%.0f", roll), SMLSIZE)
 
-    -- KOMPASS SKALA
-    local yBottom = cy - sizeH - 1
-    lcd.drawPoint(cx, yBottom - 4)
-    for i = -3, 3 do
-        local tickAngle = (math.floor(hdg / 10) + i) * 10
-        local diff = tickAngle - hdg
-        if diff > 180 then diff = diff - 360 end
-        if diff < -180 then diff = diff + 360 end
+    -- ABSTURZ-SCHUTZ 2: KOMPASS SKALA absichern gegen uninitialisierte Werte
+    if hdg and hdg >= 0 and hdg <= 360 then
+        local yBottom = cy - sizeH - 1
+        lcd.drawPoint(cx, yBottom - 4)
+        for i = -3, 3 do
+            local tickAngle = (math.floor(hdg / 10) + i) * 10
+            local diff = tickAngle - hdg
+            if diff > 180 then diff = diff - 360 end
+            if diff < -180 then diff = diff + 360 end
 
-        local tickX = cx + (diff * 0.75)
-        if tickX >= (cx - sizeW) and tickX <= (cx + sizeW) then
-            if tickAngle % 90 == 0 then
-                lcd.drawLine(tickX, yBottom - 6, tickX, yBottom, SOLID, FORCE)
-            elseif tickAngle % 30 == 0 then
-                lcd.drawLine(tickX, yBottom - 4, tickX, yBottom, SOLID, FORCE)
-            else
-                lcd.drawLine(tickX, yBottom - 2, tickX, yBottom, SOLID, FORCE)
+            local tickX = cx + (diff * 0.75)
+            -- Strikter Check, damit Pixelkoordinaten niemals außerhalb des Bildschirms gezeichnet werden
+            if tickX >= (cx - sizeW) and tickX <= (cx + sizeW) and tickX >= 0 and tickX <= 128 then
+                if tickAngle % 90 == 0 then
+                    lcd.drawLine(tickX, yBottom - 6, tickX, yBottom, SOLID, FORCE)
+                elseif tickAngle % 30 == 0 then
+                    lcd.drawLine(tickX, yBottom - 4, tickX, yBottom, SOLID, FORCE)
+                else
+                    lcd.drawLine(tickX, yBottom - 2, tickX, yBottom, SOLID, FORCE)
+                end
             end
         end
     end
@@ -228,7 +231,7 @@ local function run(event)
     lcd.drawText(1, 46, "VSpd:" .. string.format("%.0f", vspd) .. "kmh", SMLSIZE)
     lcd.drawText(1, 57, "Hdg : " .. string.format("%03d", hdg) .. "°", SMLSIZE)
 
-    -- RECHTER TEXTBLOCK (Akkukennwerte und Ampere-Zentrale)
+    -- RECHTER TEXTBLOCK (Akkukennwerte)
     local rx = 104
     lcd.drawText(rx, 2,  "Batt:", SMLSIZE)
     lcd.drawText(rx, 10, string.format("%.1f", cels).. "V",SMLSIZE)
