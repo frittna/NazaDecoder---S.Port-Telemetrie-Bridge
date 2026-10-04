@@ -222,56 +222,82 @@ void loop() {
   static uint32_t lastUpdate = 0;
   static uint32_t loopCount = 0;
 
-  if (millis() - lastUpdate >= 100UL) {
-    uint32_t currentTime = millis();
-    float dt = (float)(currentTime - lastFilterTime) / 1000.0f; 
-    lastFilterTime = currentTime;
-    lastUpdate = currentTime;
-    loopCount++;
+if (millis() - lastUpdate >= 100UL) {
+  uint32_t currentTime = millis();
+  float dt = (float)(currentTime - lastFilterTime) / 1000.0f; 
+  lastFilterTime = currentTime;
+  lastUpdate = currentTime;
+  loopCount++;
 
-    // --- PRÜFE GYRO-AUFWÄRMPHASE ---
-    if (!gyroWarmedUp) {
-      if (currentTime - systemStartTime >= GYRO_WARMUP_TIME) {
-        gyroWarmedUp = true;  // Aufwärmphase beendet!
+  if (!gyroWarmedUp) {
+    if (currentTime - systemStartTime >= GYRO_WARMUP_TIME) {
+      gyroWarmedUp = true;
+
 #if SERIAL_MONITOR == 1
-        Serial.println(F("Gyro-Aufwärmphase abgeschlossen. Lage-Übertragung startet jetzt."));
+      Serial.println(F("Gyro-Aufwärmphase abgeschlossen. Lage-Übertragung startet jetzt."));
 #endif
-      } else {
-        // Während Aufwärmphase: Gyro lesen, aber NICHT an SmartPort senden
-        Wire.beginTransmission(MPU_ADDR);
-        Wire.write(0x3B); 
-        Wire.endTransmission(false);
-        
-        Wire.requestFrom(MPU_ADDR, 14, true); 
-        if (Wire.available() >= 14) {
-          // Dummy-Read: Gyro-Daten lesen, aber nur intern filtern
-          int16_t accRawX  = (Wire.read() << 8) | Wire.read();
-          int16_t accRawY  = (Wire.read() << 8) | Wire.read();
-          int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
-          int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
-          int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
-          int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
-          int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
+    } else {
+      // Während Aufwärmphase: Gyro lesen, aber NICHT an SmartPort senden
+      Wire.beginTransmission(MPU_ADDR);
+      Wire.write(0x3B); 
+      Wire.endTransmission(false);
 
-          float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
-          float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
+      Wire.requestFrom(MPU_ADDR, 14, true); 
+      if (Wire.available() >= 14) {
+        int16_t accRawX  = (Wire.read() << 8) | Wire.read();
+        int16_t accRawY  = (Wire.read() << 8) | Wire.read();
+        int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
+        int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
+        int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
+        int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
+        int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
 
-          float gyroRateX = (float)gyroRawX / 131.0f;
-          float gyroRateY = (float)gyroRawY / 131.0f;
-          float gyroRateZ = (float)gyroRawZ / 131.0f;
+        float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
+        float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
 
-          // Komplementärfilter läuft, aber Werte werden NICHT versendet
-          // (Gyro driftet noch zu viel)
-          anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
-          angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
-          angleYaw   = angleYaw + gyroRateZ * dt;
-        }
-        // Keine setData() Aufrufe während Aufwärmphase
-        continue;
+        float gyroRateX = (float)gyroRawX / 131.0f;
+        float gyroRateY = (float)gyroRawY / 131.0f;
+        float gyroRateZ = (float)gyroRawZ / 131.0f;
+
+        anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
+        angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
+        angleYaw   = angleYaw + gyroRateZ * dt;
       }
-    }
 
+      // Warmup läuft -> kein setData(), kein Senden
+    }
+  } else {
     // --- MPU LAGEBERECHNUNG (NACH AUFWÄRMPHASE) ---
+    Wire.beginTransmission(MPU_ADDR);
+    Wire.write(0x3B); 
+    Wire.endTransmission(false);
+
+    Wire.requestFrom(MPU_ADDR, 14, true); 
+    if (Wire.available() >= 14) {
+      int16_t accRawX  = (Wire.read() << 8) | Wire.read();
+      int16_t accRawY  = (Wire.read() << 8) | Wire.read();
+      int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
+      int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
+      int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
+      int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
+      int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
+
+      float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
+      float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
+
+      float gyroRateX = (float)gyroRawX / 131.0f;
+      float gyroRateY = (float)gyroRawY / 131.0f;
+      float gyroRateZ = (float)gyroRawZ / 131.0f;
+
+      anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
+      angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
+      angleYaw   = angleYaw + gyroRateZ * dt;
+
+      gyroSensor.setData(anglePitch, angleRoll, angleYaw);
+    }
+  }
+
+    // --- MPU LAGEBERECHNUNG ---
     Wire.beginTransmission(MPU_ADDR);
     Wire.write(0x3B); 
     Wire.endTransmission(false);
@@ -286,8 +312,8 @@ void loop() {
       int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
       int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
 
-      // Absolute Neigungswinkel (Pitch / Roll) berechnen
-      // atan2 gibt das Ergebnis in Bogenmaß × 57.2957 = Grad
+      // Neigungswinkel (Pitch / Roll) berechnen
+      // atan2 gibt Ergebnis in Bogenmaß × 57.2957 = Grad
       float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
       float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
 
@@ -297,7 +323,7 @@ void loop() {
       float gyroRateZ = (float)gyroRawZ / 131.0f;
 
       // Komplementärfilter (96% Gyro + 4% Accel-Bodenvektor)
-      // gyroRate * dt ergibt die Winkeländerung in Grad.
+      // gyroRate * dt ergibt Winkeländerung in Grad.
       anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
       angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
       angleYaw   = angleYaw + gyroRateZ * dt;
