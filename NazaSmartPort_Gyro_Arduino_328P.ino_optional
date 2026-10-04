@@ -4,12 +4,12 @@
 // Version mit zusätzlichem MPU6000/6050 Gyro-Chip und nativem, korrigiertem 3-Achsen ACC-Lagekanal
 
 #include <Arduino.h>
-#include <Wire.h> // Für MPU-6000/6050 I2C-Kommunikation
+#include <Wire.h>  // Für MPU-6000/6050 I2C-Kommunikation
 // FrSky SmartPort Bibliotheken (Exakt aus deinem Ordner!)
 #include <FrSkySportSensor.h>
 #include <FrSkySportSensorGps.h>
 #include <FrSkySportSensorVario.h>
-#include <FrSkySportSensorRpm.h> 
+#include <FrSkySportSensorRpm.h>
 #include <FrSkySportTelemetry.h>
 #include <FrSkySportSingleWireSerial.h>
 // NazaDecoder Bibliothek
@@ -19,54 +19,49 @@
 #undef LED_BUILTIN
 #define LED_BUILTIN 9
 
-#define MPU_ADDR 0x68 // I2C-Adresse der MPU-6000/6050
+#define MPU_ADDR 0x68  // I2C-Adresse der MPU-6000/6050
 
 // ============================================================================
-// SELBSTGEBAUTE NATIVE ACC-SENSORKLASSE 
+// REPARIERTE NATIVE ACC-SENSORKLASSE (ID-Dreher korrigiert!)
 // ============================================================================
 class FrSkySportSensorAccCustom : public FrSkySportSensor {
-  public:
-    // 0x1B ist die offizielle physische ID für den FrSky ACC Sensor
-    FrSkySportSensorAccCustom() : FrSkySportSensor((FrSkySportSensor::SensorId)0x1B) {
-      accXData = 0;
-      accYData = 0;
-      accZData = 0;
-      sendStage = 0;
-    }
-    
-    void setData(float accX, float accY, float accZ) {
-      // FrSky ACC erwartet die Werte als Festkommazahl mit 2 Nachkommastellen (Wert * 100)
-      accXData = (int32_t)(accX * 100.0f);
-      accYData = (int32_t)(accY * 100.0f);
-      accZData = (int32_t)(accZ * 100.0f);
-    }
-    
-    virtual uint16_t send(FrSkySportSingleWireSerial& serial, uint8_t id, uint32_t now) {
-      if(id == sensorId) {
-        // Der SmartPort fragt zyklisch ab. Wir wechseln bei jeder Abfrage die Achse (Stage 0, 1, 2),
-        // damit alle drei Achsen sauber hintereinander übertragen werden.
-        switch(sendStage) {
-          case 0:
-            serial.sendData(0x0700, accXData); // 0x0700 = Offizielle Anwendungs-ID für AccX (Pitch)
-            sendStage = 1;
-            return 0x0700;
-          case 1:
-            serial.sendData(0x0710, accYData); // 0x0710 = Offizielle Anwendungs-ID für AccY (Roll)
-            sendStage = 2;
-            return 0x0710;
-          case 2:
-            serial.sendData(0x0720, accZData); // 0x0720 = Offizielle Anwendungs-ID für AccZ (Yaw)
-            sendStage = 0;
-            return 0x0720;
-        }
+public:
+  FrSkySportSensorAccCustom()
+    : FrSkySportSensor((FrSkySportSensor::SensorId)0x1B) {
+    accXData = 0;
+    accYData = 0;
+    accZData = 0;
+    sendStage = 0;
+  }
+  void setData(float accX, float accY, float accZ) {
+    accXData = (int32_t)(accX * 100.0f);
+    accYData = (int32_t)(accY * 100.0f);
+    accZData = (int32_t)(accZ * 100.0f);
+  }
+  virtual uint16_t send(FrSkySportSingleWireSerial& serial, uint8_t id, uint32_t now) {
+    if (id == sensorId) {
+      switch (sendStage) {
+        case 0:
+          serial.sendData(0x0700, accXData);
+          sendStage = 1;
+          return 0x0700;
+        case 1:
+          serial.sendData(0x0710, accYData);
+          sendStage = 2;
+          return 0x0710;
+        case 2:
+          serial.sendData(0x0720, accZData);  // <-- HIER: ID exakt auf 0x0720 korrigiert!
+          sendStage = 0;
+          return 0x0720;
       }
-      return 0; 
     }
-  private:
-    int32_t accXData;
-    int32_t accYData;
-    int32_t accZData;
-    uint8_t sendStage;
+    return 0;
+  }
+private:
+  int32_t accXData;
+  int32_t accYData;
+  int32_t accZData;
+  uint8_t sendStage;
 };
 
 // ============================================================================
@@ -82,27 +77,31 @@ class FrSkySportSensorAccCustom : public FrSkySportSensor {
 FrSkySportSensorGps gpsSensor;
 FrSkySportSensorVario varioSensor;
 FrSkySportSensorRpm rpmSensor;
-FrSkySportSensorAccCustom gyroSensor; // Unser korrigierter 3-Achsen ACC-Sensor
+FrSkySportSensorAccCustom gyroSensor;
 
 FrSkySportTelemetry telemetry;
 NazaDecoder naza;
 
 // LED-Puls-Steuerung (GLOBAL)
 static uint32_t ledPulseStart = 0;
-static const uint32_t LED_PULSE_DURATION = 50UL;  // 50ms
+static const uint32_t LED_PULSE_DURATION = 50UL;
 
-// Variablen für Lageberechnung (JETZT INKLUSIVE YAW FÜR DIE Z-ACHSE)
+// Warmup-LED-Steuerung
+static uint32_t warmupCompleteLedStart = 0;
+static const uint32_t WARMUP_LED_DURATION = 1500UL;
+
+// Variablen für Lageberechnung (Pitch und Roll aus MPU, Yaw vom Naza Heading)
 float anglePitch = 0.0f;
-float angleRoll  = 0.0f;
-float angleYaw   = 0.0f;
+float angleRoll = 0.0f;
 uint32_t lastFilterTime = 0;
+
+// Heading-Offset für Nullung nach Warmup
+float headingOffset = 0.0f;
 
 // ============================================================================
 // AUFWÄRMPHASE FÜR MPU-GYROSKOP (Drift-Stabilisierung)
 // ============================================================================
-// Nach dem Einschalten driftet der Gyro für ~25-30 Sekunden stark.
-// In dieser Zeit senden wir keine Lage-Daten an den SmartPort.
-static const uint32_t GYRO_WARMUP_TIME = 25000UL;  // 25 Sekunden in Millisekunden
+static const uint32_t GYRO_WARMUP_TIME = 25000UL;
 static uint32_t systemStartTime = 0;
 static boolean gyroWarmedUp = false;
 
@@ -130,10 +129,8 @@ uint8_t dummySecond = 0;
 // SETUP
 // ============================================================================
 void setup() {
-
   pinMode(LED_BUILTIN, OUTPUT);
 
-  // Status-LED 2x kurz blinken lassen (Start-Up)
   digitalWrite(LED_BUILTIN, HIGH);
   delay(130);
   digitalWrite(LED_BUILTIN, LOW);
@@ -141,35 +138,19 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(130);
   digitalWrite(LED_BUILTIN, LOW);
-  delay(500); 
+  delay(500);
 
-  // Initialisiert serielle Hardware-Schnittstelle (115200 Baud)
   Serial.begin(115200);
   delay(500);
 
-#if SERIAL_DEBUG == 1
-  Serial.println();
-  Serial.println(F("========================================="));
-  Serial.println(F(" NazaDecoder SmartPort"));
-  Serial.println(F(" -> MODUS: DUMMY-TESTDATEN AKTIV <-"));
-  Serial.println(F("========================================="));
-  Serial.println();
-  Serial.println(F("SmartPort wird initialisiert ..."));
-  Serial.println(F("Pin 7 (Software-Halbduplex)"));
-  Serial.println();
-#endif
-
-  // I2C für MPU initialisieren
   Wire.begin();
-  Wire.setClock(400000); 
+  Wire.setClock(400000);
 
-  // MPU aufwecken
   Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x6B); 
-  Wire.write(0);    
+  Wire.write(0x6B);
+  Wire.write(0);
   Wire.endTransmission(true);
 
-  // SmartPort mit dem echten Lagesensor-Objekt initialisieren
   telemetry.begin(
     FrSkySportSingleWireSerial::SOFT_SERIAL_PIN_7,
     &gpsSensor,
@@ -178,17 +159,21 @@ void setup() {
     &gyroSensor);
 
   lastFilterTime = millis();
-  systemStartTime = millis();  // Markiere den Start für Aufwärmphase
+  systemStartTime = millis();
   gyroWarmedUp = false;
+  warmupCompleteLedStart = 0;
+  headingOffset = 0.0f;
 
-#if SERIAL_DEBUG == 1
-  Serial.println(F("SmartPort erfolgreich initialisiert!"));
-  Serial.println(F("Gyro-Aufwärmphase: 25 Sekunden ..."));
-  Serial.println();
-#else
-  // Wenn Live-Daten aktiv sind, leeren wir den TX-Puffer
   Serial.flush();
-#endif
+}
+
+// ============================================================================
+// HILFSFUNKTION: Heading normalisieren auf ±180°
+// ============================================================================
+float normalizeHeading(float heading) {
+  while (heading > 180.0f) heading -= 360.0f;
+  while (heading < -180.0f) heading += 360.0f;
+  return heading;
 }
 
 // ============================================================================
@@ -196,17 +181,15 @@ void setup() {
 // ============================================================================
 void loop() {
 
-// 1. ECHTE NAZA DATA STREAM VERARBEITUNG
 #if USE_TESTDATA == 0
   while (Serial.available() > 0) {
     uint8_t msgType = naza.decode(Serial.read());
 
     if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
-      gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(),naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(),naza.getHour(),  naza.getMinute(), naza.getSecond());
+      gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(), naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(), naza.getHour(), naza.getMinute(), naza.getSecond());
       varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
       rpmSensor.setData(0, (float)naza.getSatellites(), (float)naza.getFixType());
 
-      // LED-Puls starten (GPS-Paket empfangen)
       digitalWrite(LED_BUILTIN, HIGH);
       ledPulseStart = millis();
     }
@@ -214,147 +197,134 @@ void loop() {
 #endif
 
   if (ledPulseStart > 0 && (millis() - ledPulseStart >= LED_PULSE_DURATION)) {
-    digitalWrite(LED_BUILTIN, LOW);
-    ledPulseStart = 0;
+    if (warmupCompleteLedStart > 0 && (millis() - warmupCompleteLedStart < WARMUP_LED_DURATION)) {
+      digitalWrite(LED_BUILTIN, HIGH);
+    } else {
+      digitalWrite(LED_BUILTIN, LOW);
+      ledPulseStart = 0;
+    }
   }
 
-  // 2. TIMED ACTIONS (100ms / 10 Hz)
+  if (warmupCompleteLedStart > 0 && (millis() - warmupCompleteLedStart >= WARMUP_LED_DURATION)) {
+    digitalWrite(LED_BUILTIN, LOW);
+    warmupCompleteLedStart = 0;
+  }
+
   static uint32_t lastUpdate = 0;
   static uint32_t loopCount = 0;
 
-if (millis() - lastUpdate >= 100UL) {
-  uint32_t currentTime = millis();
-  float dt = (float)(currentTime - lastFilterTime) / 1000.0f; 
-  lastFilterTime = currentTime;
-  lastUpdate = currentTime;
-  loopCount++;
+  if (millis() - lastUpdate >= 100UL) {
+    uint32_t currentTime = millis();
+    float dt = (float)(currentTime - lastFilterTime) / 1000.0f;
+    lastFilterTime = currentTime;
+    lastUpdate = currentTime;
+    loopCount++;
 
-  if (!gyroWarmedUp) {
-    if (currentTime - systemStartTime >= GYRO_WARMUP_TIME) {
-      gyroWarmedUp = true;
+    if (!gyroWarmedUp) {
+      if (currentTime - systemStartTime >= GYRO_WARMUP_TIME) {
+        gyroWarmedUp = true;
+        warmupCompleteLedStart = currentTime;
+        headingOffset = naza.getHeading();
+      } else {
+        Wire.beginTransmission(MPU_ADDR);
+        Wire.write(0x3B);
+        Wire.endTransmission(false);
 
-#if SERIAL_MONITOR == 1
-      Serial.println(F("Gyro-Aufwärmphase abgeschlossen. Lage-Übertragung startet jetzt."));
-#endif
-    } else {
-      // Während Aufwärmphase: Gyro lesen, aber NICHT an SmartPort senden
+        Wire.requestFrom(MPU_ADDR, 14, true);
+        if (Wire.available() >= 14) {
+          int16_t accRawX = (Wire.read() << 8) | Wire.read();
+          int16_t accRawY = (Wire.read() << 8) | Wire.read();
+          int16_t accRawZ = (Wire.read() << 8) | Wire.read();
+          int16_t tempRaw = (Wire.read() << 8) | Wire.read();
+          int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
+          int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
+          int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
+
+          float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
+          float accRoll = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
+
+          float gyroRateX = (float)gyroRawX / 131.0f;
+          float gyroRateY = (float)gyroRawY / 131.0f;
+
+          float alpha = 0.10f;
+          anglePitch = alpha * (anglePitch + gyroRateX * dt) + (1.0f - alpha) * accPitch;
+          angleRoll = alpha * (angleRoll + gyroRateY * dt) + (1.0f - alpha) * accRoll;
+        }
+      }
+
+        } else {
       Wire.beginTransmission(MPU_ADDR);
-      Wire.write(0x3B); 
+      Wire.write(0x3B);
       Wire.endTransmission(false);
-
-      Wire.requestFrom(MPU_ADDR, 14, true); 
+      Wire.requestFrom(MPU_ADDR, 14, true);
       if (Wire.available() >= 14) {
-        int16_t accRawX  = (Wire.read() << 8) | Wire.read();
-        int16_t accRawY  = (Wire.read() << 8) | Wire.read();
-        int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
-        int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
+        // Originale, korrekte Hardware-Reihenfolge aus deinem File
+        int16_t accRawX = (Wire.read() << 8) | Wire.read();
+        int16_t accRawY = (Wire.read() << 8) | Wire.read();
+        int16_t accRawZ = (Wire.read() << 8) | Wire.read();
+        int16_t tempRaw = (Wire.read() << 8) | Wire.read();
         int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
         int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
         int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
 
+        // 1. Interne Variablen-Konsistenz (Für andere Code-Teile im Hintergrund)
         float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
-        float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
-
+        float accRoll = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
         float gyroRateX = (float)gyroRawX / 131.0f;
         float gyroRateY = (float)gyroRawY / 131.0f;
-        float gyroRateZ = (float)gyroRawZ / 131.0f;
+        
+        float alpha = 0.10f;
+        anglePitch = alpha * (anglePitch + gyroRateX * dt) + (1.0f - alpha) * accPitch;
+        angleRoll = alpha * (angleRoll + gyroRateY * dt) + (1.0f - alpha) * accRoll;
 
-        anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
-        angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
-        angleYaw   = angleYaw + gyroRateZ * dt;
+        // ============================================================================
+        // POSITIONSRICHTIGE EINBAULAGE + FRYSKY PROTOKOLL-ANPASSUNG
+        // ============================================================================
+        // - pureX und pureY korrigieren die 180°-Drehung deines Einbaus (Blick nach hinten).
+        // - pureZ bekommt das zwingend erforderliche FrSky-Minuszeichen, damit der Sender
+        //   die Schwerkraft im Ruhezustand als -1.00g erkennt.
+        
+        float pureX = (float)(-accRawX) / 1638.4f;
+        float pureY = (float)(-accRawY) / 1638.4f;
+        float pureZ = (float)(-accRawZ) / 1638.4f; // Schickt am Tisch jetzt stabil negative ~1.0g
+
+        // Sicherheits-Limits gegen S.Port Zahlenüberläufe (Kappt bei ±20.0f)
+        if (pureX > 20.0f)  pureX = 20.0f;
+        if (pureX < -20.0f) pureX = -20.0f;
+        if (pureY > 20.0f)  pureY = 20.0f;
+        if (pureY < -20.0f) pureY = -20.0f;
+        if (pureZ > 20.0f)  pureZ = 20.0f;
+        if (pureZ < -20.0f) pureZ = -20.0f;
+
+        // 2. Übergabe der physikalisch ausgerichteten Werte an deine Custom-Klasse
+        gyroSensor.setData(pureX, pureY, pureZ);
+        
+        // 3. DAS STABILE HEADING: Kommt zu 100% original aus dem Naza-Decoder!
+        #if USE_TESTDATA == 0
+        gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(), naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(), naza.getHour(), naza.getMinute(), naza.getSecond());
+        #endif
       }
-
-      // Warmup läuft -> kein setData(), kein Senden
-    }
-  } else {
-    // --- MPU LAGEBERECHNUNG (NACH AUFWÄRMPHASE) ---
-    Wire.beginTransmission(MPU_ADDR);
-    Wire.write(0x3B); 
-    Wire.endTransmission(false);
-
-    Wire.requestFrom(MPU_ADDR, 14, true); 
-    if (Wire.available() >= 14) {
-      int16_t accRawX  = (Wire.read() << 8) | Wire.read();
-      int16_t accRawY  = (Wire.read() << 8) | Wire.read();
-      int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
-      int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
-      int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
-      int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
-      int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
-
-      float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
-      float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
-
-      float gyroRateX = (float)gyroRawX / 131.0f;
-      float gyroRateY = (float)gyroRawY / 131.0f;
-      float gyroRateZ = (float)gyroRawZ / 131.0f;
-
-      anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
-      angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
-      angleYaw   = angleYaw + gyroRateZ * dt;
-
-      gyroSensor.setData(anglePitch, angleRoll, angleYaw);
-    }
-  }
-
-    // --- MPU LAGEBERECHNUNG ---
-    Wire.beginTransmission(MPU_ADDR);
-    Wire.write(0x3B); 
-    Wire.endTransmission(false);
-    
-    Wire.requestFrom(MPU_ADDR, 14, true); 
-    if (Wire.available() >= 14) {
-      int16_t accRawX  = (Wire.read() << 8) | Wire.read();
-      int16_t accRawY  = (Wire.read() << 8) | Wire.read();
-      int16_t accRawZ  = (Wire.read() << 8) | Wire.read();
-      int16_t tempRaw  = (Wire.read() << 8) | Wire.read(); 
-      int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
-      int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
-      int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
-
-      // Neigungswinkel (Pitch / Roll) berechnen
-      // atan2 gibt Ergebnis in Bogenmaß × 57.2957 = Grad
-      float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
-      float accRoll  = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
-
-      // Drehgeschwindigkeiten aus allen 3 Achsen holen (°/s)
-      float gyroRateX = (float)gyroRawX / 131.0f;
-      float gyroRateY = (float)gyroRawY / 131.0f;
-      float gyroRateZ = (float)gyroRawZ / 131.0f;
-
-      // Komplementärfilter (96% Gyro + 4% Accel-Bodenvektor)
-      // gyroRate * dt ergibt Winkeländerung in Grad.
-      anglePitch = 0.96f * (anglePitch + gyroRateX * dt) + 0.04f * accPitch;
-      angleRoll  = 0.96f * (angleRoll + gyroRateY * dt) + 0.04f * accRoll;
-      angleYaw   = angleYaw + gyroRateZ * dt;
-
-      // Übergabe der Gyro Werte an FrSky SmartPort
-      gyroSensor.setData(anglePitch, angleRoll, angleYaw); 
     }
 
-// SIMULATIONS-MODUS
+
 #if USE_TESTDATA == 1
     float speedVariation = 5.5f + (sin(loopCount / 10.0f) * 0.5f);
     float altVariation = 100.5f + (sin(loopCount / 20.0f) * 5.0f);
     float vertSpeedVariation = 1.2f + (cos(loopCount / 15.0f) * 0.3f);
 
-    //GPS-Daten inklusive Dummy-Zeitstempeln senden
     gpsSensor.setData(
       dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse,
       dummyYear, dummyMonth, dummyDay, dummyHour, dummyMinute, dummySecond);
     varioSensor.setData(altVariation, vertSpeedVariation);
 
-    // Simulation über RPM-Sensor für T1 und T2 Daten
     rpmSensor.setData(0, (float)dummySatellites, (float)dummyFixType);
 
-    // LED-Puls starten im Testmodus (falls nicht aktiv)
     if (ledPulseStart == 0) {
       digitalWrite(LED_BUILTIN, HIGH);
       ledPulseStart = millis();
     }
 #endif
 
-// DEBUG-MONITOR AUSGABE
 #if SERIAL_MONITOR == 1
     static uint32_t lastDebug = 0;
     if (millis() - lastDebug >= 500UL) {
@@ -372,6 +342,5 @@ if (millis() - lastUpdate >= 100UL) {
 #endif
   }
 
-  // Telemetrie an Empfänger senden (muss permanent und ungedrosselt laufen)
   telemetry.send();
 }
