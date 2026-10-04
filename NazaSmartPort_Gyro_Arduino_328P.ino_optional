@@ -1,7 +1,7 @@
 // NazaDecoder - S.Port Telemetrie Bridge mit MPU6000/MPU6050 Gyro-Chip integraton für Lageposition zusätzlich*
 // Naza-M V1/V2 to FrSky SmartPort - Arduino
 // -> integriert die GPS- und Lagedaten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
-// Version mit zusätzlichem MPU6000 Gyro-Chip und nativem, korrigiertem 3-Achsen ACC-Lagekanal
+// Version mit zusätzlichem MPU6000 Gyro-Chip und nativem, 3-Achsen ACC-Lagekanal
 
 #include <Arduino.h>
 #include <Wire.h> // Für MPU-6000 I2C-Kommunikation  (SDA/SCL beim 328p sind die Pins 27/28 bzw. PC4/PC5 bzw. A4/A5 in Arduino !)
