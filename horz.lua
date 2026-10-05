@@ -247,9 +247,9 @@ local function drawMenu()
                 if editField == 1 then srcStr = txt else unitStr = txt end
             end
 
-            -- HIER BEHOBEN: Direktes Rendering der bereinigten Werte (Verhindert Text-Verschiebungen)
+            --Direktes Rendering der bereinigten Werte (Verhindert Text-Verschiebungen)
             lcd.drawText(60, yPos, trim(srcStr), (isSel and editField == 1) and INVERS or 0)
-            lcd.drawText(118, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
+            lcd.drawText(106, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
             yPos = yPos + 8
         end
 
