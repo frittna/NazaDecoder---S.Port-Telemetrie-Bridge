@@ -1,4 +1,357 @@
-// NazaDecoder - S.Port Telemetrie Bridge                                           @frittna 5.Okt.2026
+// NazaDecoder - S.Port Telemetrie Bridge                                                   @frittna 6.Okt.2026
+// Naza-M V1/V2 to FrSky SmartPort - Arduino + MPU6000/MPU6050 Gyro-Chip integraton für Lageposition zusätzlich*
+// -> integriert die GPS Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
+// Version mit zusätzlichem MPU6000/6050 Gyro-Chip und nativem, korrigiertem 3-Achsen ACC-Lagekanal
+
+#include <Arduino.h>
+#include <Wire.h>  // Für MPU-6000/6050 I2C-Kommunikation
+// FrSky SmartPort Bibliotheken
+#include <FrSkySportSensor.h>
+#include <FrSkySportSensorGps.h>
+#include <FrSkySportSensorVario.h>
+#include <FrSkySportSensorRpm.h>
+#include <FrSkySportTelemetry.h>
+#include <FrSkySportSingleWireSerial.h>
+// NazaDecoder Bibliothek
+#include <NazaDecoder.h>
+
+// Status LED
+#undef LED_BUILTIN
+#define LED_BUILTIN 9
+
+#define MPU_ADDR 0x68  // I2C-Adresse der MPU-6000/6050
+
+// ============================================================================
+// ACC-SENSORKLASSE
+// ============================================================================
+class FrSkySportSensorAccCustom : public FrSkySportSensor {
+public:
+  FrSkySportSensorAccCustom()
+    : FrSkySportSensor((FrSkySportSensor::SensorId)0x1B) {
+    accXData = 0;
+    accYData = 0;
+    accZData = 0;
+    sendStage = 0;
+  }
+  void setData(float accX, float accY, float accZ) {
+    accXData = (int32_t)(accX * 100.0f);
+    accYData = (int32_t)(accY * 100.0f);
+    accZData = (int32_t)(accZ * 100.0f);
+  }
+  virtual uint16_t send(FrSkySportSingleWireSerial& serial, uint8_t id, uint32_t now) {
+    if (id == sensorId) {
+      switch (sendStage) {
+        case 0:
+          serial.sendData(0x0700, accXData);
+          sendStage = 1;
+          return 0x0700;
+        case 1:
+          serial.sendData(0x0710, accYData);
+          sendStage = 2;
+          return 0x0710;
+        case 2:
+          serial.sendData(0x0720, accZData);
+          sendStage = 0;
+          return 0x0720;
+      }
+    }
+    return 0;
+  }
+private:
+  int32_t accXData;
+  int32_t accYData;
+  int32_t accZData;
+  uint8_t sendStage;
+};
+
+// ============================================================================
+// COMPILER-SCHALTER FÜR DIE SERIELLE SCHNITTSTELLE / SIMULATION
+// ============================================================================
+// GPS Live Data aktiv:     0 = Live-Daten vom Naza1   1 = nur künstliche Dummy-Daten
+#define USE_TESTDATA 0  //default:0
+// Serial-Monitor Ausgabe:  0 = aus   1 = ein
+#define SERIAL_MONITOR 0  //default:0 (WENN GPS AN IST GEHT KEIN SERIAL UND UMGEKEHRT, DA NUR 1 ECHTE UART VORHANDEN!)
+// ============================================================================
+// OBJEKTE
+// ============================================================================
+FrSkySportSensorGps gpsSensor;
+FrSkySportSensorVario varioSensor;
+FrSkySportSensorRpm rpmSensor;
+FrSkySportSensorAccCustom gyroSensor;
+
+FrSkySportTelemetry telemetry;
+NazaDecoder naza;
+
+// LED-Puls-Steuerung (GLOBAL)
+static uint32_t ledPulseStart = 0;
+static const uint32_t LED_PULSE_DURATION = 50UL;
+
+// Warmup-LED-Steuerung
+static uint32_t warmupCompleteLedStart = 0;
+static const uint32_t WARMUP_LED_DURATION = 1500UL;
+
+// Variablen für Lageberechnung (Pitch und Roll aus MPU, Yaw vom Naza Heading)
+float anglePitch = 0.0f;
+float angleRoll = 0.0f;
+uint32_t lastFilterTime = 0;
+
+// Heading-Offset für Nullung nach Warmup
+float headingOffset = 0.0f;
+
+// ============================================================================
+// AUFWÄRMPHASE FÜR MPU-GYROSKOP (Drift-Stabilisierung)
+// ============================================================================
+static const uint32_t GYRO_WARMUP_TIME = 25000UL;
+static uint32_t systemStartTime = 0;
+static boolean gyroWarmedUp = false;
+
+// ============================================================================
+// DUMMY-TEST-DATEN
+// ============================================================================
+#if USE_TESTDATA == 1
+float dummyLatitude = 48.8584f;
+float dummyLongitude = 2.2945f;
+float dummyAltitude = 100.5f;
+float dummySpeed = 5.5f;
+float dummyCourse = 45.0f;
+float dummyVertSpeed = 1.2f;
+uint8_t dummySatellites = 9;
+uint8_t dummyFixType = 3;
+uint8_t dummyYear = 26;
+uint8_t dummyMonth = 9;
+uint8_t dummyDay = 26;
+uint8_t dummyHour = 14;
+uint8_t dummyMinute = 35;
+uint8_t dummySecond = 0;
+#endif
+
+// ============================================================================
+// SETUP
+// ============================================================================
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(130);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(130);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(130);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(500);
+
+  Serial.begin(115200);
+  delay(500);
+
+  Wire.begin();
+  Wire.setClock(400000);
+
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
+
+  telemetry.begin(
+    FrSkySportSingleWireSerial::SOFT_SERIAL_PIN_7,
+    &gpsSensor,
+    &varioSensor,
+    &rpmSensor,
+    &gyroSensor);
+
+  lastFilterTime = millis();
+  systemStartTime = millis();
+  gyroWarmedUp = false;
+  warmupCompleteLedStart = 0;
+  headingOffset = 0.0f;
+
+  Serial.flush();
+}
+
+// ============================================================================
+// HILFSFUNKTION: Heading normalisieren auf ±180°
+// ============================================================================
+float normalizeHeading(float heading) {
+  while (heading > 180.0f) heading -= 360.0f;
+  while (heading < -180.0f) heading += 360.0f;
+  return heading;
+}
+
+
+
+// ============================================================================
+// HAUPTSCHLEIFE
+// ============================================================================
+void loop() {
+
+#if USE_TESTDATA == 0
+  while (Serial.available() > 0) {
+    uint8_t msgType = naza.decode(Serial.read());
+
+    if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
+      gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(), naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(), naza.getHour(), naza.getMinute(), naza.getSecond());
+      varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
+      rpmSensor.setData(0, (float)naza.getSatellites(), (float)naza.getFixType());
+
+      digitalWrite(LED_BUILTIN, HIGH);
+      ledPulseStart = millis();
+    }
+  }
+#endif
+
+  if (ledPulseStart > 0 && (millis() - ledPulseStart >= LED_PULSE_DURATION)) {
+    if (warmupCompleteLedStart > 0 && (millis() - warmupCompleteLedStart < WARMUP_LED_DURATION)) {
+      digitalWrite(LED_BUILTIN, HIGH);
+    } else {
+      digitalWrite(LED_BUILTIN, LOW);
+      ledPulseStart = 0;
+    }
+  }
+
+  if (warmupCompleteLedStart > 0 && (millis() - warmupCompleteLedStart >= WARMUP_LED_DURATION)) {
+    digitalWrite(LED_BUILTIN, LOW);
+    warmupCompleteLedStart = 0;
+  }
+
+  static uint32_t lastUpdate = 0;
+  static uint32_t loopCount = 0;
+
+  if (millis() - lastUpdate >= 40UL) {  //25Hz MPU-Auslesefrequenz
+    uint32_t currentTime = millis();
+    float dt = (float)(currentTime - lastFilterTime) / 1000.0f;
+    lastFilterTime = currentTime;
+    lastUpdate = currentTime;
+    loopCount++;
+
+    if (!gyroWarmedUp) {
+      if (currentTime - systemStartTime >= GYRO_WARMUP_TIME) {
+        gyroWarmedUp = true;
+        warmupCompleteLedStart = currentTime;
+        headingOffset = naza.getHeading();
+      } else {
+        Wire.beginTransmission(MPU_ADDR);
+        Wire.write(0x3B);
+        Wire.endTransmission(false);
+
+        Wire.requestFrom(MPU_ADDR, 14, true);
+        if (Wire.available() >= 14) {
+          int16_t accRawX = (Wire.read() << 8) | Wire.read();
+          int16_t accRawY = (Wire.read() << 8) | Wire.read();
+          int16_t accRawZ = (Wire.read() << 8) | Wire.read();
+          int16_t tempRaw = (Wire.read() << 8) | Wire.read();
+          int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
+          int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
+          int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
+
+          float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
+          float accRoll = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
+
+          float gyroRateX = (float)gyroRawX / 131.0f;
+          float gyroRateY = (float)gyroRawY / 131.0f;
+
+          float alpha = 0.10f;
+          anglePitch = alpha * (anglePitch + gyroRateX * dt) + (1.0f - alpha) * accPitch;
+          angleRoll = alpha * (angleRoll + gyroRateY * dt) + (1.0f - alpha) * accRoll;
+        }
+      }
+
+    } else {
+      Wire.beginTransmission(MPU_ADDR);
+      Wire.write(0x3B);
+      Wire.endTransmission(false);
+      Wire.requestFrom(MPU_ADDR, 14, true);
+      if (Wire.available() >= 14) {
+        int16_t accRawX = (Wire.read() << 8) | Wire.read();
+        int16_t accRawY = (Wire.read() << 8) | Wire.read();
+        int16_t accRawZ = (Wire.read() << 8) | Wire.read();
+        int16_t tempRaw = (Wire.read() << 8) | Wire.read();
+        int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
+        int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
+        int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
+        float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
+        float accRoll = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
+        float gyroRateX = (float)gyroRawX / 131.0f;
+        float gyroRateY = (float)gyroRawY / 131.0f;
+
+        float alpha = 0.10f;
+        anglePitch = alpha * (anglePitch + gyroRateX * dt) + (1.0f - alpha) * accPitch;
+        angleRoll = alpha * (angleRoll + gyroRateY * dt) + (1.0f - alpha) * accRoll;
+
+        // ============================================================================
+        // POSITIONSRICHTIGE EINBAULAGE + FRYSKY PROTOKOLL-ANPASSUNG
+        // ============================================================================
+        // - pureX und pureY korrigieren die 180°-Drehung deines Einbaus (Blick nach hinten).
+        // - pureZ bekommt das zwingend erforderliche FrSky-Minuszeichen, damit der Sender
+        //   die Schwerkraft im Ruhezustand als -1.00g erkennt.
+        // ============================================================================
+        // Hier kannst man die Achsen beliebig drehen, spiegeln oder tauschen:
+
+        //float pureX = (float)(-accRawX) / 1638.4f; // Hier Vorzeichen ändern oder durch -accRawY tauschen!
+        //float pureY = (float)(-accRawY) / 1638.4f; // Hier Vorzeichen ändern oder durch -accRawX tauschen!
+
+        //### Spickzettel für den Achsentausch am Modell:
+        //* Wenn die **Wirkrichtung falsch herum** ist (z. B. Roll schlägt nach links statt nach rechts aus): einfach das Vorzeichen ändern (z. B. von `-accRawX` zu `accRawX`).
+        //* Wenn die **Achsen vertauscht** sind (z. B. Copter neigt sich nach vorn, aber Roll schlägt aus): einfach die Variablen-Namen der Register austauschen (z. B. `pureX = (float)(-accRawY) / 1638.4f;`).
+        //Da im LUA-Skript ein Achsen Inversions-Menü haben, ist es am besten, die Achsen im Arduino einmal grob so hinzulegen, dass **X auch wirklich X (Roll)** und **Y auch wirklich Y (Pitch)** ist. Den Rest im LUA-Menü invertieren.
+
+        float pureY = (float)(-accRawX) / 1638.4f;
+        float pureX = (float)(-accRawY) / 1638.4f;
+        float pureZ = (float)(-accRawZ) / 1638.4f;  // am Tisch stabil negative ~1.0g
+
+        // Sicherheits-Limits gegen S.Port Zahlenüberläufe (für ±20.0f)
+        if (pureX > 20.0f) pureX = 20.0f;
+        if (pureX < -20.0f) pureX = -20.0f;
+        if (pureY > 20.0f) pureY = 20.0f;
+        if (pureY < -20.0f) pureY = -20.0f;
+        if (pureZ > 20.0f) pureZ = 20.0f;
+        if (pureZ < -20.0f) pureZ = -20.0f;
+
+        // 2. Übergabe der physikalisch ausgerichteten Werte an deine Custom-Klasse
+        gyroSensor.setData(pureX, pureY, pureZ);
+
+// 3. HEADING: Kommt aus dem Naza Kompass am GPS-Pilz
+#if USE_TESTDATA == 0
+        gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(), naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(), naza.getHour(), naza.getMinute(), naza.getSecond());
+#endif
+      }
+    }
+
+#if USE_TESTDATA == 1
+    float speedVariation = 5.5f + (sin(loopCount / 10.0f) * 0.5f);
+    float altVariation = 100.5f + (sin(loopCount / 20.0f) * 5.0f);
+    float vertSpeedVariation = 1.2f + (cos(loopCount / 15.0f) * 0.3f);
+
+    gpsSensor.setData(
+      dummyLatitude, dummyLongitude, altVariation, speedVariation, dummyCourse,
+      dummyYear, dummyMonth, dummyDay, dummyHour, dummyMinute, dummySecond);
+    varioSensor.setData(altVariation, vertSpeedVariation);
+
+    rpmSensor.setData(0, (float)dummySatellites, (float)dummyFixType);
+
+    if (ledPulseStart == 0) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      ledPulseStart = millis();
+    }
+#endif
+
+#if SERIAL_MONITOR == 1
+    static uint32_t lastDebug = 0;
+    if (millis() - lastDebug >= 500UL) {
+      lastDebug = millis();
+
+      Serial.print(F("[TEST] Alt="));
+      Serial.print(100.5f + (sin(loopCount / 20.0f) * 5.0f), 1);
+      Serial.print(F("m | Satelliten (T1)="));
+      Serial.print(dummySatellites);
+      Serial.print(F(" | Fix (T2)="));
+      Serial.print(dummyFixType);
+      Serial.print(F(" | Loops="));
+      Serial.println(loopCount);
+    }
+#endif
+  }
+
+  telemetry.send();
+}// NazaDecoder - S.Port Telemetrie Bridge                                           @frittna 5.Okt.2026
 // Naza-M V1/V2 to FrSky SmartPort - Arduino + MPU6000/MPU6050 Gyro-Chip integraton für Lageposition zusätzlich*
 // -> integriert die GPS Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
 // Version mit zusätzlichem MPU6000/6050 Gyro-Chip und nativem, korrigiertem 3-Achsen ACC-Lagekanal
