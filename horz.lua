@@ -127,7 +127,7 @@ local function run(event)
         selectedRow = 1 
     end
 
-    -- FAKTOREN-ZWEISUNG BASIEREND AUF SPEICHERWERTEN
+    -- FAKTOREN-ZWEISUNG BASIEREND ON SPEICHERWERTEN
     local pFact = (invPitch == 1) and -1 or 1
     local rFact = (invRoll == 1)  and -1 or 1
     local hFact = (invHdg == 1)   and -1 or 1
@@ -150,7 +150,20 @@ local function run(event)
     local alt   = getValue("GAlt") or getValue("Alt") or 0
     local rssi  = getValue("RSSI") or 0
     local sats  = getValue("Tmp1") or getValue("Sats") or 0
-    local cels  = getValue("Cels") or 0
+    
+    -- Cels Tabellen-Abfrage fuer EdgeTX/OpenTX
+    local cels_raw = getValue("Cels") or 0
+    local cels = 0
+    if type(cels_raw) == "table" then
+        -- Wenn es eine Tabelle ist, addieren wir alle Einzelzellen zur Gesamtspannung auf
+        for _, cell_volt in ipairs(cels_raw) do
+            cels = cels + cell_volt
+        end
+    else
+        -- Fallback, falls es ein reiner Zahlenwert oder 0 ist
+        cels = tonumber(cels_raw) or 0
+    end
+
     local cmin  = getValue("cell-min") or 0 
     local gfix  = getValue("Tmp2") or 0
     local amp   = getValue("Curr") or 0
@@ -178,8 +191,7 @@ local function run(event)
     local dy = math.sin(rollAngle) * (sizeW - 1)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     
-    -- ABSTURZ-SCHUTZ 1: Höhen-Wert alle 5m als Strich am linken inneren Rand der Box
-    -- Wird nur berechnet, wenn die Werte mathematisch gültig sind
+    -- Höhen-Wert alle 5m als Strich am linken inneren Rand der Box
     if alt and sizeH and sizeH > 0 then
         local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
         if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
@@ -199,7 +211,7 @@ local function run(event)
     lcd.drawText(cx - sizeW + 2, cy +20, "Y:" .. string.format("%.0f", pitch), SMLSIZE)
     lcd.drawText(cx + sizeW - 18, cy +20, "X:" .. string.format("%.0f", roll), SMLSIZE)
 
-    -- ABSTURZ-SCHUTZ 2: KOMPASS SKALA absichern gegen uninitialisierte Werte
+    -- KOMPASS SKALA
     if hdg and hdg >= 0 and hdg <= 360 then
         local yBottom = cy - sizeH - 1
         lcd.drawPoint(cx, yBottom - 4)
@@ -210,7 +222,6 @@ local function run(event)
             if diff < -180 then diff = diff + 360 end
 
             local tickX = cx + (diff * 0.75)
-            -- Strikter Check, damit Pixelkoordinaten niemals außerhalb des Bildschirms gezeichnet werden
             if tickX >= (cx - sizeW) and tickX <= (cx + sizeW) and tickX >= 0 and tickX <= 128 then
                 if tickAngle % 90 == 0 then
                     lcd.drawLine(tickX, yBottom - 6, tickX, yBottom, SOLID, FORCE)
@@ -234,9 +245,9 @@ local function run(event)
     -- RECHTER TEXTBLOCK (Akkukennwerte)
     local rx = 104
     lcd.drawText(rx, 2,  "Batt:", SMLSIZE)
-    lcd.drawText(rx, 10, string.format("%.1f", cels).. "V",SMLSIZE)
+    lcd.drawText(rx, 10, string.format("%.1f", cels) .. "V", SMLSIZE)
     lcd.drawText(rx, 20, "CelD:", SMLSIZE)
-    lcd.drawText(rx, 28, string.format("%.2f", cmin).. "V", SMLSIZE)
+    lcd.drawText(rx, 28, string.format("%.2f", cmin) .. "V", SMLSIZE)
     lcd.drawText(rx, 48, "Amp:", SMLSIZE)
     lcd.drawText(rx, 56, string.format("%.1f", amp) .. "A", SMLSIZE)
 
