@@ -1,11 +1,11 @@
-// NazaDecoder - S.Port Telemetrie Bridge mit MPU6000/MPU6050 Gyro-Chip integraton für Lageposition zusätzlich*
-// Naza-M V1/V2 to FrSky SmartPort - Arduino
-// -> integriert die GPS- und Lagedaten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
+// NazaDecoder - S.Port Telemetrie Bridge                                           @frittna 5.Okt.2026
+// Naza-M V1/V2 to FrSky SmartPort - Arduino + MPU6000/MPU6050 Gyro-Chip integraton für Lageposition zusätzlich*
+// -> integriert die GPS Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
 // Version mit zusätzlichem MPU6000/6050 Gyro-Chip und nativem, korrigiertem 3-Achsen ACC-Lagekanal
 
 #include <Arduino.h>
 #include <Wire.h>  // Für MPU-6000/6050 I2C-Kommunikation
-// FrSky SmartPort Bibliotheken (Exakt aus deinem Ordner!)
+// FrSky SmartPort Bibliotheken
 #include <FrSkySportSensor.h>
 #include <FrSkySportSensorGps.h>
 #include <FrSkySportSensorVario.h>
@@ -22,7 +22,7 @@
 #define MPU_ADDR 0x68  // I2C-Adresse der MPU-6000/6050
 
 // ============================================================================
-// REPARIERTE NATIVE ACC-SENSORKLASSE (ID-Dreher korrigiert!)
+// ACC-SENSORKLASSE
 // ============================================================================
 class FrSkySportSensorAccCustom : public FrSkySportSensor {
 public:
@@ -50,7 +50,7 @@ public:
           sendStage = 2;
           return 0x0710;
         case 2:
-          serial.sendData(0x0720, accZData);  // <-- HIER: ID exakt auf 0x0720 korrigiert!
+          serial.sendData(0x0720, accZData);
           sendStage = 0;
           return 0x0720;
       }
@@ -176,6 +176,8 @@ float normalizeHeading(float heading) {
   return heading;
 }
 
+
+
 // ============================================================================
 // HAUPTSCHLEIFE
 // ============================================================================
@@ -213,7 +215,7 @@ void loop() {
   static uint32_t lastUpdate = 0;
   static uint32_t loopCount = 0;
 
-  if (millis() - lastUpdate >= 100UL) {
+  if (millis() - lastUpdate >= 40UL) {  //25Hz MPU-Auslesefrequenz
     uint32_t currentTime = millis();
     float dt = (float)(currentTime - lastFilterTime) / 1000.0f;
     lastFilterTime = currentTime;
@@ -252,13 +254,12 @@ void loop() {
         }
       }
 
-        } else {
+    } else {
       Wire.beginTransmission(MPU_ADDR);
       Wire.write(0x3B);
       Wire.endTransmission(false);
       Wire.requestFrom(MPU_ADDR, 14, true);
       if (Wire.available() >= 14) {
-        // Originale, korrekte Hardware-Reihenfolge aus deinem File
         int16_t accRawX = (Wire.read() << 8) | Wire.read();
         int16_t accRawY = (Wire.read() << 8) | Wire.read();
         int16_t accRawZ = (Wire.read() << 8) | Wire.read();
@@ -266,13 +267,11 @@ void loop() {
         int16_t gyroRawX = (Wire.read() << 8) | Wire.read();
         int16_t gyroRawY = (Wire.read() << 8) | Wire.read();
         int16_t gyroRawZ = (Wire.read() << 8) | Wire.read();
-
-        // 1. Interne Variablen-Konsistenz (Für andere Code-Teile im Hintergrund)
         float accPitch = atan2((float)accRawY, sqrt((float)accRawX * accRawX + (float)accRawZ * accRawZ)) * 57.2957f;
         float accRoll = atan2((float)-accRawX, (float)accRawZ) * 57.2957f;
         float gyroRateX = (float)gyroRawX / 131.0f;
         float gyroRateY = (float)gyroRawY / 131.0f;
-        
+
         float alpha = 0.10f;
         anglePitch = alpha * (anglePitch + gyroRateX * dt) + (1.0f - alpha) * accPitch;
         angleRoll = alpha * (angleRoll + gyroRateY * dt) + (1.0f - alpha) * accRoll;
@@ -283,29 +282,38 @@ void loop() {
         // - pureX und pureY korrigieren die 180°-Drehung deines Einbaus (Blick nach hinten).
         // - pureZ bekommt das zwingend erforderliche FrSky-Minuszeichen, damit der Sender
         //   die Schwerkraft im Ruhezustand als -1.00g erkennt.
-        
-        float pureX = (float)(-accRawX) / 1638.4f;
-        float pureY = (float)(-accRawY) / 1638.4f;
-        float pureZ = (float)(-accRawZ) / 1638.4f; // Schickt am Tisch jetzt stabil negative ~1.0g
+        // ============================================================================
+        // Hier kannst man die Achsen beliebig drehen, spiegeln oder tauschen:
 
-        // Sicherheits-Limits gegen S.Port Zahlenüberläufe (Kappt bei ±20.0f)
-        if (pureX > 20.0f)  pureX = 20.0f;
+        //float pureX = (float)(-accRawX) / 1638.4f; // Hier Vorzeichen ändern oder durch -accRawY tauschen!
+        //float pureY = (float)(-accRawY) / 1638.4f; // Hier Vorzeichen ändern oder durch -accRawX tauschen!
+
+        //### Spickzettel für den Achsentausch am Modell:
+        //* Wenn die **Wirkrichtung falsch herum** ist (z. B. Roll schlägt nach links statt nach rechts aus): einfach das Vorzeichen ändern (z. B. von `-accRawX` zu `accRawX`).
+        //* Wenn die **Achsen vertauscht** sind (z. B. Copter neigt sich nach vorn, aber Roll schlägt aus): einfach die Variablen-Namen der Register austauschen (z. B. `pureX = (float)(-accRawY) / 1638.4f;`).
+        //Da im LUA-Skript ein Achsen Inversions-Menü haben, ist es am besten, die Achsen im Arduino einmal grob so hinzulegen, dass **X auch wirklich X (Roll)** und **Y auch wirklich Y (Pitch)** ist. Den Rest im LUA-Menü invertieren.
+
+        float pureY = (float)(-accRawX) / 1638.4f;
+        float pureX = (float)(-accRawY) / 1638.4f;
+        float pureZ = (float)(-accRawZ) / 1638.4f;  // am Tisch stabil negative ~1.0g
+
+        // Sicherheits-Limits gegen S.Port Zahlenüberläufe (für ±20.0f)
+        if (pureX > 20.0f) pureX = 20.0f;
         if (pureX < -20.0f) pureX = -20.0f;
-        if (pureY > 20.0f)  pureY = 20.0f;
+        if (pureY > 20.0f) pureY = 20.0f;
         if (pureY < -20.0f) pureY = -20.0f;
-        if (pureZ > 20.0f)  pureZ = 20.0f;
+        if (pureZ > 20.0f) pureZ = 20.0f;
         if (pureZ < -20.0f) pureZ = -20.0f;
 
         // 2. Übergabe der physikalisch ausgerichteten Werte an deine Custom-Klasse
         gyroSensor.setData(pureX, pureY, pureZ);
-        
-        // 3. DAS STABILE HEADING: Kommt zu 100% original aus dem Naza-Decoder!
-        #if USE_TESTDATA == 0
+
+// 3. HEADING: Kommt aus dem Naza Kompass am GPS-Pilz
+#if USE_TESTDATA == 0
         gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(), naza.getSpeed(), naza.getHeading(), naza.getYear(), naza.getMonth(), naza.getDay(), naza.getHour(), naza.getMinute(), naza.getSecond());
-        #endif
+#endif
       }
     }
-
 
 #if USE_TESTDATA == 1
     float speedVariation = 5.5f + (sin(loopCount / 10.0f) * 0.5f);
