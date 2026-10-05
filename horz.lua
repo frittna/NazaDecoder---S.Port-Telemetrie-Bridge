@@ -249,7 +249,7 @@ local function drawMenu()
 
             --Direktes Rendering der bereinigten Werte (Verhindert Text-Verschiebungen)
             lcd.drawText(60, yPos, trim(srcStr), (isSel and editField == 1) and INVERS or 0)
-            lcd.drawText(104, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
+            lcd.drawText(102, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
             yPos = yPos + 8
         end
 
