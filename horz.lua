@@ -249,7 +249,7 @@ local function drawMenu()
 
             --Direktes Rendering der bereinigten Werte (Verhindert Text-Verschiebungen)
             lcd.drawText(60, yPos, trim(srcStr), (isSel and editField == 1) and INVERS or 0)
-            lcd.drawText(106, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
+            lcd.drawText(104, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
             yPos = yPos + 8
         end
 
@@ -267,7 +267,6 @@ local function drawMenu()
             selectedRow == 2 and INVERS or 0)
         lcd.drawText(1, 48, (selectedRow == 3 and "> " or "  ") .. "     >> SAVE <<", selectedRow == 3 and INVERS or 0)
     end
-    lcd.drawText(127, 57, "[PAGE] >", SMLSIZE + RIGHT)
 end
 -- ============================================================================
 -- HAUPTFUNKTION (FLUGMODUS & HAUPTSCHLEIFE)
