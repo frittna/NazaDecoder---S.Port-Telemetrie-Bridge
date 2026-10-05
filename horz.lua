@@ -11,7 +11,7 @@ local menuOpenTime = 0
 local configLoaded = false
 
 -- Speicherpfad im Logs-Systemordner
-local configPath = "/LOGS/hrzn_cfg.txt"
+local configPath = "/LOGS/hrzn_DJI.txt"
 
 local function loadConfig()
     local f = io.open(configPath, "r")
@@ -126,13 +126,33 @@ local function run(event)
         menuOpenTime = getTime() 
         selectedRow = 1 
     end
-
+    
     -- FAKTOREN-ZWEISUNG BASIEREND ON SPEICHERWERTEN
     local pFact = (invPitch == 1) and -1 or 1
     local rFact = (invRoll == 1)  and -1 or 1
     local hFact = (invHdg == 1)   and -1 or 1
 
-    -- Sensoren abfragen (Ptch/Roll oder Fallback auf G-Kräfte)
+    -- SENSOREN ABFRAGEN
+    local rssi  = getValue("RSSI") or 0
+    local gfix  = getValue("Gfix") or 0 --getValue("Tmp2") or 0
+    local sats  = getValue("Sats") or 0 --getValue("Tmp1") or 0
+    local dist  = getValue("Dist") or 0
+    local alt   = getValue("GAlt") or 0 --getValue("Alt") or 0
+    local vspd  = getValue("VSpd") or 0
+    local cmin  = getValue("celD") or 0 
+    local amp   = getValue("Curr") or 0
+
+    -- Cels Tabellen-Abfrage fuer EdgeTX/OpenTX
+    local cels_raw = getValue("Cels") or 0
+    local cels = 0
+    if type(cels_raw) == "table" then        -- Wenn es eine Tabelle ist, addieren wir alle Einzelzellen zur Gesamtspannung auf
+        for _, cell_volt in ipairs(cels_raw) do
+            cels = cels + cell_volt
+        end
+    else                                     -- Fallback, falls es ein reiner Zahlenwert oder 0 ist
+        cels = tonumber(cels_raw) or 0
+    end
+    -- Sensoren abfragen (Ptch/Roll oder Fallback)
     local pitch = getValue("Ptch") or 0
     local roll  = getValue("Roll") or 0
     if pitch == 0 and roll == 0 then
@@ -142,32 +162,8 @@ local function run(event)
         pitch = pitch * pFact
         roll  = roll * rFact
     end
-
     local hdg   = (getValue("Hdg") or 0) * hFact
     if hdg < 0 then hdg = hdg + 360 end
-    
-    local dist  = getValue("Dist") or 0
-    local alt   = getValue("GAlt") or getValue("Alt") or 0
-    local rssi  = getValue("RSSI") or 0
-    local sats  = getValue("Tmp1") or getValue("Sats") or 0
-    
-    -- Cels Tabellen-Abfrage fuer EdgeTX/OpenTX
-    local cels_raw = getValue("Cels") or 0
-    local cels = 0
-    if type(cels_raw) == "table" then
-        -- Wenn es eine Tabelle ist, addieren wir alle Einzelzellen zur Gesamtspannung auf
-        for _, cell_volt in ipairs(cels_raw) do
-            cels = cels + cell_volt
-        end
-    else
-        -- Fallback, falls es ein reiner Zahlenwert oder 0 ist
-        cels = tonumber(cels_raw) or 0
-    end
-
-    local cmin  = getValue("cell-min") or 0 
-    local gfix  = getValue("Tmp2") or 0
-    local amp   = getValue("Curr") or 0
-    local vspd  = getValue("VSpd") or 0
 
     -- GRAFIK-LAYOUT HINTERGRUND
     local cx = 76    
@@ -192,8 +188,8 @@ local function run(event)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     
     -- Höhen-Wert alle 5m als Strich am linken inneren Rand der Box
-    if alt and sizeH and sizeH > 0 then
-        local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
+    if GAlt and sizeH and sizeH > 0 then
+        local altTickY = cy + ((GAlt % 5) * (sizeH / 5)) - (sizeH / 2)
         if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
             lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
         end
@@ -237,9 +233,9 @@ local function run(event)
     -- LINKER TEXTBLOCK (Navigationsdaten)
     lcd.drawText(1, 2,  "RSSI: " .. string.format("%d", rssi) .. "dB", SMLSIZE)
     lcd.drawText(1, 13, "Sats: " .. string.format("%.0f", sats), SMLSIZE)
-    lcd.drawText(1, 24, "Alt :  " .. string.format("%.0f", alt) .. "m", SMLSIZE)
+    lcd.drawText(1, 24, "GAlt: " .. string.format("%.0f", alt) .. "m", SMLSIZE)
     lcd.drawText(1, 35, "Dist: " .. string.format("%.0f", dist) .. "m", SMLSIZE)
-    lcd.drawText(1, 46, "VSpd:" .. string.format("%.0f", vspd) .. "kmh", SMLSIZE)
+    lcd.drawText(1, 46, "VSpd:" .. string.format("%.0f", vspd) .. "m/s", SMLSIZE)
     lcd.drawText(1, 57, "Hdg : " .. string.format("%03d", hdg) .. "°", SMLSIZE)
 
     -- RECHTER TEXTBLOCK (Akkukennwerte)
