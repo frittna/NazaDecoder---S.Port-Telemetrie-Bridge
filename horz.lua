@@ -1,4 +1,4 @@
--- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) --  		       @frittna 06.Okt.2026
+-- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) --  		        @frittna 6.Okt.2026
 ---> Das LUA Script ist entsanden mit dem Projekt https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge
 
 local invPitch     = 0
