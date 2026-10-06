@@ -36,3 +36,10 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 
 
 ![](Case_compl.jpg)
+
+--Settings:
+
+![](lua_main_screen.jpg)
+
+![](lua_settings_screens.jpg)
+
