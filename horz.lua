@@ -1,5 +1,5 @@
 -- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) --  		       @frittna 06.Okt.2026
----> Das LUA Script ist entsanden mit dem Projekt https://github.com
+---> Das LUA Script ist entsanden mit dem Projekt https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge
 
 local invPitch     = 0
 local invRoll      = 0
@@ -149,7 +149,7 @@ local function handleMenu(event)
     end
 
     -- 2. FALL: NAVIGIEREN / BLÄTTERN
-    local maxRows = (menuPage == 1) and 5 or ((menuPage == 4) and 3 or ((menuPage == 3) and 4 or 7))
+    local maxRows = (menuPage == 1) and 6 or ((menuPage == 4) and 4 or ((menuPage == 2) and 7 or 5))
     if event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT then
         selectedRow = selectedRow - 1
         if selectedRow < 1 then selectedRow = maxRows end
@@ -171,16 +171,19 @@ local function handleMenu(event)
             elseif selectedRow == 4 then
                 groundMode = groundMode + 1
                 if groundMode > 2 then groundMode = 0 end
-            elseif selectedRow == 5 then
+            elseif selectedRow == 5 then -- Zeile 5: Originales Speichern
                 saveConfig()
                 menuActive = false
+            elseif selectedRow == 6 then -- Zeile 6: [scroll] blättert weiter
+                menuPage = 2
+                selectedRow = 1
             end
         elseif menuPage == 2 or menuPage == 3 then
             local maxSel = (menuPage == 2) and 6 or 3
             if selectedRow <= maxSel then
                 editField = 1
                 editCharIdx = 1
-            else
+            else -- Zeile 7 (S.2) bzw. Zeile 5 (S.3): [scroll] blättert weiter
                 menuPage = menuPage + 1
                 if menuPage > 4 then menuPage = 1 end
                 selectedRow = 1
@@ -190,14 +193,18 @@ local function handleMenu(event)
                 mapPitch = mapPitch + 1; if mapPitch > 3 then mapPitch = 1 end
             elseif selectedRow == 2 then
                 mapRoll = mapRoll + 1; if mapRoll > 3 then mapRoll = 1 end
-            elseif selectedRow == 3 then
+            elseif selectedRow == 3 then -- Zeile 3: Originales Speichern
                 saveConfig()
                 menuActive = false
+            elseif selectedRow == 4 then -- Zeile 4: [scroll] blättert im Kreis zurück zu Seite 1
+                menuPage = 1
+                selectedRow = 1
             end
         end
     end
     return true
 end
+
 
 -- MENÜ-GRAFIK
 local function drawMenu()
@@ -244,214 +251,245 @@ local function drawMenu()
                 if blink then
                     txt = string.sub(txt, 1, editCharIdx - 1) .. "_" .. string.sub(txt, editCharIdx + 1)
                 end
-                if editField == 1 then sSrc[idx] = currentText else sUnit[idx] = currentText end
+                if editField == 1 then srcStr = txt else unitStr = txt end
             end
 
             lcd.drawText(60, yPos, trim(srcStr), (isSel and editField == 1) and INVERS or 0)
             lcd.drawText(102, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
             yPos = yPos + 8
         end
-
-        local maxSel = (menuPage == 2) and 6 or 3
-        if selectedRow == (maxSel + 1) then
-            lcd.drawRectangle(90, 55, 36, 9, FORCE)
-        end
     elseif menuPage == 4 then
         lcd.drawText(1, 2, "-- AXIS MAPPING (4/4) --", INVERS)
         local axNames = { "AccX", "AccY", "AccZ" }
-lcd.drawText(1, 15, (selectedRow == 1 and "> " or "  ") .. "Map Pitch -> " .. axNames[mapPitch],
-selectedRow == 1 and INVERS or 0)
-lcd.drawText(1, 27, (selectedRow == 2 and "> " or "  ") .. "Map Roll  -> " .. axNames[mapRoll],
-selectedRow == 2 and INVERS or 0)
-lcd.drawText(1, 48, (selectedRow == 3 and "> " or "  ") .. "     >> SAVE <<", selectedRow == 3 and INVERS or 0)
-end
-end
+        lcd.drawText(1, 15, (selectedRow == 1 and "> " or "  ") .. "Map Pitch -> " .. axNames[mapPitch],
+            selectedRow == 1 and INVERS or 0)
+        lcd.drawText(1, 27, (selectedRow == 2 and "> " or "  ") .. "Map Roll  -> " .. axNames[mapRoll],
+            selectedRow == 2 and INVERS or 0)
+        lcd.drawText(1, 48, (selectedRow == 3 and "> " or "  ") .. "     >> SAVE <<", selectedRow == 3 and INVERS or 0)
+    end -- Hier endet die Seiten-Unterscheidung!
+
+    -- ============================================================================
+    -- PAGE-WECHSEL (JETZT HIER GANZ UNTEN FÜR ALLE SEITEN)
+    -- ============================================================================
+    local maxRows = (menuPage == 1) and 6 or ((menuPage == 4) and 4 or ((menuPage == 2) and 7 or 5))
+    if selectedRow == maxRows then
+        lcd.drawRectangle(82, 55, 44, 9, FORCE)
+        lcd.drawText(104, 56, "[scroll]", INVERS + CENTER)
+    end
+end -- end der drawMenu() Funktion
+
 -- ============================================================================
 -- HAUPTFUNKTION (FLUGMODUS & HAUPTSCHLEIFE)
 -- ============================================================================
 local function run(event)
-lcd.clear()
-if not configLoaded then
-loadConfig()
-end
-if event == EVT_MENU_LONG then
-menuActive = true
-menuPage = 1
-selectedRow = 1
-editField = 0
-menuOpenTime = getTime()
-end
-if menuActive then
-handleMenu(event)
-drawMenu()
-return 0
-end
--- ============================================================================
--- FLUGMODUS: SENSOR-AUSWERTUNG
--- ============================================================================
-local pFact    = (invPitch == 1) and -1 or 1
-local rFact    = (invRoll == 1) and -1 or 1
-local hFact    = (invHdg == 1) and -1 or 1
-local rssi     = getValue(trim(sSrc[1])) or 0
-local sats     = getValue("Sats") or 0
-local rawAlt   = getValue(trim(sSrc[2])) or 0
-local rawGspd  = getValue(trim(sSrc[3])) or 0
-local dist     = getValue(trim(sSrc[4])) or 0
-local vspd     = getValue(trim(sSrc[5])) or 0
-local rawHdg   = getValue(trim(sSrc[6])) or 0
-local cels_raw = getValue(trim(sSrc[7])) or 0
-local cmin     = getValue(trim(sSrc[8])) or 0
-local curr      = getValue(trim(sSrc[9])) or 0
-filteredAlt    = (rawAlt * 0.25) + (filteredAlt * 0.75)
-local alt      = filteredAlt or 0
-local gspd     = rawGspd * 1.852
-local cels     = 0
-if type(cels_raw) == "table" then
-for _, cell_volt in ipairs(cels_raw) do cels = cels + cell_volt end
-else
-cels = tonumber(cels_raw) or 0
-end
-local accValues = { getValue("AccX") or 0, getValue("AccY") or 0, getValue("AccZ") or 0 }
-local pitch     = accValues[mapPitch] * 90 * pFact
-local roll      = accValues[mapRoll] * 90 * rFact
-rawHdg          = rawHdg * hFact
-if rawHdg < 0 then rawHdg = rawHdg + 360 end
-local diff = rawHdg - filteredHdg
-if diff > 180 then diff = diff - 360 end
-if diff < -180 then diff = diff + 360 end
-filteredHdg = filteredHdg + (diff * 0.3)
-local hdg = (filteredHdg % 360 + 360) % 360
--- ============================================================================
--- GRAFIK-RENDERING (KÜNSTLICHER HORIZONT)
--- ============================================================================
-local cx, sizeW, cy, sizeH = 76, 26, 35, 28
-local pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
-local rollAngle = (roll / 57.2957)
-local dx = math.cos(rollAngle) * (sizeW - 1)
-local dy = math.sin(rollAngle) * (sizeW - 1)
-local isUpsideDown = false
-local absRoll = math.abs(roll % 360)
-if absRoll > 90 and absRoll < 270 then isUpsideDown = true end
-if groundMode > 0 then
-local startX, endX = cx - sizeW + 1, cx + sizeW - 1
-for y = cy - sizeH + 1, cy + sizeH - 1 do
-local xLeft, xRight = startX, endX
-if dy ~= 0 then
-local intersectX = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
-if (dy > 0 and not isUpsideDown) or (dy < 0 and isUpsideDown) then
-xRight = math.min(endX, intersectX)
-else
-xLeft = math.max(startX, intersectX)
-end
-else
-if (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
-if y <= (cy + pitchOffset) then xLeft = endX + 1 end
-else
-if y >= (cy + pitchOffset) then xLeft = endX + 1 end
-end
-end
-if xLeft <= xRight then
-if groundMode == 1 and y % 2 == 0 then
-lcd.drawLine(xLeft, y, xRight, y, SOLID, FORCE)
-elseif groundMode == 2 then
-local xLoopStart = xLeft + ((xLeft + y) % 2)
-for x = xLoopStart, xRight, 2 do lcd.drawPoint(x, y) end
-end
-end
-end
-end
-lcd.drawRectangle(cx - sizeW, cy - sizeH, sizeW * 2, sizeH * 2, FORCE)
-lcd.drawLine(cx - sizeW - 5, cy, cx - sizeW - 1, cy, SOLID, FORCE)
-lcd.drawLine(cx + sizeW + 1, cy, cx + sizeW + 5, cy, SOLID, FORCE)
-lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
-lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
-lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
-if alt and sizeH > 0 then
-local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
-if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
-lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
-end
-end
-lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
-local gfix = getValue("Gfix") or 0
-local fixStr = (gfix == 3) and "3D" or ((gfix == 2) and "2D" or "nF")
-lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fixStr, SMLSIZE + RIGHT)
-lcd.drawText(cx, cy - 13, string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE + CENTER)
--- COMPASS SCALE & ARROW
-if hdg and hdg >= 0 and hdg <= 360 then
-local yBottom = cy - sizeH - 1  -- Oberer Rand der Box
--- Orientierungspfeil: Zeigt von unten nach oben, Spitze genau auf dem Boxrand (yBottom)
-lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)             -- Vertikaler Stamm
-lcd.drawLine(cx - 1, yBottom - 1, cx + 1, yBottom - 1, SOLID, FORCE) -- Breite Basis
-lcd.drawPoint(cx, yBottom)                                           -- Spitze auf der Box
-for i = -6, 6 do
-local tickAngle = (math.floor(hdg / 5) + i) * 5
-local normalizedAngle = (tickAngle % 360 + 360) % 360
-local diffH = tickAngle - hdg
-if diffH > 180 then diffH = diffH - 360 elseif diffH < -180 then diffH = diffH + 360 end
-local tickX = cx + (diffH * 0.75)
-if tickX >= (cx - sizeW) and tickX <= (cx + sizeW) and tickX >= 0 and tickX <= 128 then
--- Haupt- und Zwischenrichtungen (Teilbar durch 45)
-if normalizedAngle % 45 == 0 then
-lcd.drawLine(tickX - 1, yBottom - 6, tickX + 1, yBottom - 6, SOLID, FORCE)
-lcd.drawLine(tickX, yBottom - 5, tickX, yBottom - 4, SOLID, FORCE)
-local letter = ""
-if normalizedAngle == 0 or normalizedAngle == 360 then letter = "N"
-elseif normalizedAngle == 45 then letter = "NO"
-elseif normalizedAngle == 90 then letter = "O"
-elseif normalizedAngle == 135 then letter = "SO"
-elseif normalizedAngle == 180 then letter = "S"
-elseif normalizedAngle == 225 then letter = "SW"
-elseif normalizedAngle == 270 then letter = "W"
-elseif normalizedAngle == 315 then letter = "NW"
-end
--- Buchstaben vertikal um 3px nach oben versetzt (yBottom - 6)
-local xOffset = (#letter == 2) and -4 or -2
-lcd.drawText(tickX + xOffset, yBottom - 6, letter, SMLSIZE)
--- Zwischenstufen (30°-Schritte)
-elseif normalizedAngle % 15 == 0 then
-lcd.drawLine(tickX, yBottom - 4, tickX, yBottom, SOLID, FORCE)
-else
-lcd.drawLine(tickX, yBottom - 2, tickX, yBottom, SOLID, FORCE)
-end
-end
-end
-end
+    lcd.clear()
+    if not configLoaded then
+        loadConfig()
+    end
+    if event == EVT_MENU_LONG then
+        menuActive = true
+        menuPage = 1
+        selectedRow = 1
+        editField = 0
+        menuOpenTime = getTime()
+    end
+    if menuActive then
+        handleMenu(event)
+        drawMenu()
+        return 0
+    end
+    -- ============================================================================
+    -- FLUGMODUS: SENSOR-AUSWERTUNG
+    -- ============================================================================
+    local pFact    = (invPitch == 1) and -1 or 1
+    local rFact    = (invRoll == 1) and -1 or 1
+    local hFact    = (invHdg == 1) and -1 or 1
+    local rssi     = getValue(trim(sSrc[1])) or 0
+    local sats     = getValue("Sats") or 0
+    local rawAlt   = getValue(trim(sSrc[2])) or 0
+    local rawGspd  = getValue(trim(sSrc[3])) or 0
+    local dist     = getValue(trim(sSrc[4])) or 0
+    local vspd     = getValue(trim(sSrc[5])) or 0
+    local rawHdg   = getValue(trim(sSrc[6])) or 0
+    local cels_raw = getValue(trim(sSrc[7])) or 0
+    local cmin     = getValue(trim(sSrc[8])) or 0
+    local curr     = getValue(trim(sSrc[9])) or 0
+    filteredAlt    = (rawAlt * 0.25) + (filteredAlt * 0.75)
+    local alt      = filteredAlt or 0
+    local gspd     = rawGspd * 1.852
+    local cels     = 0
+    if type(cels_raw) == "table" then
+        for _, cell_volt in ipairs(cels_raw) do cels = cels + cell_volt end
+    else
+        cels = tonumber(cels_raw) or 0
+    end
+    local accValues = { getValue("AccX") or 0, getValue("AccY") or 0, getValue("AccZ") or 0 }
+    local pitch     = accValues[mapPitch] * 90 * pFact
+    local roll      = accValues[mapRoll] * 90 * rFact
+    rawHdg          = rawHdg * hFact
+    if rawHdg < 0 then rawHdg = rawHdg + 360 end
+    local diff = rawHdg - filteredHdg
+    if diff > 180 then diff = diff - 360 end
+    if diff < -180 then diff = diff + 360 end
+    filteredHdg = filteredHdg + (diff * 0.3)
+    local hdg = (filteredHdg % 360 + 360) % 360
+    -- ============================================================================
+    -- GRAFIK-RENDERING (KÜNSTLICHER HORIZONT)
+    -- ============================================================================
+    local cx, sizeW, cy, sizeH = 76, 26, 35, 28
+    local pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
+    local rollAngle = (roll / 57.2957)
+    local dx = math.cos(rollAngle) * (sizeW - 1)
+    local dy = math.sin(rollAngle) * (sizeW - 1)
+    local isUpsideDown = false
+    local absRoll = math.abs(roll % 360)
+    if absRoll > 90 and absRoll < 270 then isUpsideDown = true end
+    if groundMode > 0 then
+        local startX, endX = cx - sizeW + 1, cx + sizeW - 1
+        for y = cy - sizeH + 1, cy + sizeH - 1 do
+            local xLeft, xRight = startX, endX
+            if dy ~= 0 then
+                local intersectX = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
+                if (dy > 0 and not isUpsideDown) or (dy < 0 and isUpsideDown) then
+                    xRight = math.min(endX, intersectX)
+                else
+                    xLeft = math.max(startX, intersectX)
+                end
+            else
+                if (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
+                    if y <= (cy + pitchOffset) then xLeft = endX + 1 end
+                else
+                    if y >= (cy + pitchOffset) then xLeft = endX + 1 end
+                end
+            end
+            if xLeft <= xRight then
+                if groundMode == 1 and y % 2 == 0 then
+                    lcd.drawLine(xLeft, y, xRight, y, SOLID, FORCE)
+                elseif groundMode == 2 then
+                    local xLoopStart = xLeft + ((xLeft + y) % 2)
+                    for x = xLoopStart, xRight, 2 do lcd.drawPoint(x, y) end
+                end
+            end
+        end
+    end
+    lcd.drawRectangle(cx - sizeW, cy - sizeH, sizeW * 2, sizeH * 2, FORCE)
+    lcd.drawLine(cx - sizeW - 5, cy, cx - sizeW - 1, cy, SOLID, FORCE)
+    lcd.drawLine(cx + sizeW + 1, cy, cx + sizeW + 5, cy, SOLID, FORCE)
+    lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
+    lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
+    lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
+    if alt and sizeH > 0 then
+        local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
+        if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
+            lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
+        end
+    end
+    lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
+    local gfix = getValue("Gfix") or 0
+    local fixStr = (gfix == 3) and "3D" or ((gfix == 2) and "2D" or "nF")
+    lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fixStr, SMLSIZE + RIGHT)
+    lcd.drawText(cx, cy - 13, string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE + CENTER)
+    -- COMPASS SCALE & ARROW
+    if hdg and hdg >= 0 and hdg <= 360 then
+        local yBottom = cy - sizeH - 1                                       -- Oberer Rand der Box
+        -- Orientierungspfeil: Zeigt von unten nach oben, Spitze genau auf dem Boxrand (yBottom)
+        lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)             -- Vertikaler Stamm
+        lcd.drawLine(cx - 1, yBottom - 1, cx + 1, yBottom - 1, SOLID, FORCE) -- Breite Basis
+        lcd.drawPoint(cx, yBottom)                                           -- Spitze auf der Box
+        for i = -6, 6 do
+            local tickAngle = (math.floor(hdg / 5) + i) * 5
+            local normalizedAngle = (tickAngle % 360 + 360) % 360
+            local diffH = tickAngle - hdg
+            if diffH > 180 then diffH = diffH - 360 elseif diffH < -180 then diffH = diffH + 360 end
+            local tickX = cx + (diffH * 0.75)
+            if tickX >= (cx - sizeW) and tickX <= (cx + sizeW) and tickX >= 0 and tickX <= 128 then
+                -- Haupt- und Zwischenrichtungen (Teilbar durch 45)
+                if normalizedAngle % 45 == 0 then
+                    lcd.drawLine(tickX - 1, yBottom - 6, tickX + 1, yBottom - 6, SOLID, FORCE)
+                    lcd.drawLine(tickX, yBottom - 5, tickX, yBottom - 4, SOLID, FORCE)
+                    local letter = ""
+                    if normalizedAngle == 0 or normalizedAngle == 360 then
+                        letter = "N"
+                    elseif normalizedAngle == 45 then
+                        letter = "NO"
+                    elseif normalizedAngle == 90 then
+                        letter = "O"
+                    elseif normalizedAngle == 135 then
+                        letter = "SO"
+                    elseif normalizedAngle == 180 then
+                        letter = "S"
+                    elseif normalizedAngle == 225 then
+                        letter = "SW"
+                    elseif normalizedAngle == 270 then
+                        letter = "W"
+                    elseif normalizedAngle == 315 then
+                        letter = "NW"
+                    end
+                    -- Buchstaben vertikal um 3px nach oben versetzt (yBottom - 6)
+                    local xOffset = (#letter == 2) and -4 or -2
+                    lcd.drawText(tickX + xOffset, yBottom - 6, letter, SMLSIZE)
+                    -- Zwischenstufen (30°-Schritte)
+                elseif normalizedAngle % 15 == 0 then
+                    lcd.drawLine(tickX, yBottom - 4, tickX, yBottom, SOLID, FORCE)
+                else
+                    lcd.drawLine(tickX, yBottom - 2, tickX, yBottom, SOLID, FORCE)
+                end
+            end
+        end
+    end
     -- ============================================================================
     -- LINKE SEITE (Blendet Zeile komplett aus, wenn der Name leer ist)
     -- ============================================================================
-    if trim(sName[1]) ~= "" then lcd.drawText(1, 2,  trim(sName[1]) .. ":" .. string.format("%d", rssi) .. trim(sUnit[1]), SMLSIZE) end
-    if trim(sName[2]) ~= "" then lcd.drawText(1, 13, trim(sName[2]) .. ":" .. string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE) end
-    if trim(sName[3]) ~= "" then lcd.drawText(1, 24, trim(sName[3]) .. ":" .. string.format("%.0f", gspd) .. trim(sUnit[3]), SMLSIZE) end
-    if trim(sName[4]) ~= "" then lcd.drawText(1, 35, trim(sName[4]) .. ":" .. string.format("%.0f", dist) .. trim(sUnit[4]), SMLSIZE) end
-    if trim(sName[5]) ~= "" then lcd.drawText(1, 46, trim(sName[5]) .. ":" .. string.format("%.0f", vspd) .. trim(sUnit[5]), SMLSIZE) end
-    if trim(sName[6]) ~= "" then lcd.drawText(1, 57, trim(sName[6]) .. ":" .. string.format("%03d", hdg) .. trim(sUnit[6]), SMLSIZE) end
+    if trim(sName[1]) ~= "" then
+        lcd.drawText(1, 2, trim(sName[1]) .. ":" .. string.format("%d", rssi) .. trim(sUnit[1]),
+            SMLSIZE)
+    end
+    if trim(sName[2]) ~= "" then
+        lcd.drawText(1, 13,
+            trim(sName[2]) .. ":" .. string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE)
+    end
+    if trim(sName[3]) ~= "" then
+        lcd.drawText(1, 24,
+            trim(sName[3]) .. ":" .. string.format("%.0f", gspd) .. trim(sUnit[3]), SMLSIZE)
+    end
+    if trim(sName[4]) ~= "" then
+        lcd.drawText(1, 35,
+            trim(sName[4]) .. ":" .. string.format("%.0f", dist) .. trim(sUnit[4]), SMLSIZE)
+    end
+    if trim(sName[5]) ~= "" then
+        lcd.drawText(1, 46,
+            trim(sName[5]) .. ":" .. string.format("%.0f", vspd) .. trim(sUnit[5]), SMLSIZE)
+    end
+    if trim(sName[6]) ~= "" then
+        lcd.drawText(1, 57,
+            trim(sName[6]) .. ":" .. string.format("%03d", hdg) .. trim(sUnit[6]), SMLSIZE)
+    end
 
     -- ============================================================================
     -- RECHTER TEXTBLOCK (Blendet Zeile komplett aus, wenn der Name leer ist)
     -- ============================================================================
     local rx = 104
     local rEdge = 127
-    
+
     if trim(sName[7]) ~= "" then
         lcd.drawText(rx, 1, trim(sName[7]) .. ":", SMLSIZE)
         lcd.drawText(rEdge, 9, string.format("%.1f", cels) .. trim(sUnit[7]), SMLSIZE + RIGHT)
     end
-    
+
     if trim(sName[8]) ~= "" then
         lcd.drawText(rx, 19, trim(sName[8]) .. ":", SMLSIZE)
         lcd.drawText(rEdge, 27, string.format("%.2f", cmin) .. trim(sUnit[8]), SMLSIZE + RIGHT)
     end
-    
+
     if trim(sName[9]) ~= "" then
         lcd.drawText(rx, 36, trim(sName[9]) .. ":", SMLSIZE)
         lcd.drawText(rEdge, 43, string.format("%.1f", curr) .. trim(sUnit[9]), SMLSIZE + RIGHT)
     end
-    
+
     -- Die Horizont-Werte (Pitch/Roll) bleiben immer sichtbar
     lcd.drawText(rEdge - 1, 51, string.format("%.0f", pitch) .. "°=Y", SMLSIZE + RIGHT)
     lcd.drawText(rEdge, 58, string.format("%.0f", roll) .. "°=X", SMLSIZE + RIGHT)
 
-return 0
+    return 0
 end
 return { init = init, run = run }
