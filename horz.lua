@@ -1,4 +1,4 @@
--- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) --  		       @frittna 06.Okt.2026
+-- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) --              @frittna 06.Okt.2026
 ---> Das LUA Script ist entsanden mit dem Projekt https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge
 
 local invPitch     = 0
@@ -472,17 +472,17 @@ local function run(event)
     local rEdge = 127
 
     if trim(sName[7]) ~= "" then
-        lcd.drawText(rEdge - 1, 1, trim(sName[7]) .. ":", SMLSIZE + RIGHT)
+        lcd.drawText(rEdge + 1, 1, trim(sName[7]) .. ":", SMLSIZE + RIGHT)
         lcd.drawText(rEdge, 9, string.format("%.1f", cels) .. trim(sUnit[7]), SMLSIZE + RIGHT)
     end
 
     if trim(sName[8]) ~= "" then
-        lcd.drawText(rEdge - 1, 19, trim(sName[8]) .. ":", SMLSIZE + RIGHT)
+        lcd.drawText(rEdge + 1, 19, trim(sName[8]) .. ":", SMLSIZE + RIGHT)
         lcd.drawText(rEdge, 27, string.format("%.2f", cmin) .. trim(sUnit[8]), SMLSIZE + RIGHT)
     end
 
     if trim(sName[9]) ~= "" then
-        lcd.drawText(rEdge - 1, 36, trim(sName[9]) .. ":", SMLSIZE + RIGHT)
+        lcd.drawText(rEdge +1 1, 36, trim(sName[9]) .. ":", SMLSIZE + RIGHT)
         lcd.drawText(rEdge, 43, string.format("%.1f", curr) .. trim(sUnit[9]), SMLSIZE + RIGHT)
     end
 
