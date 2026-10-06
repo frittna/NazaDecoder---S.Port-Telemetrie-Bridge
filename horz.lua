@@ -482,7 +482,7 @@ local function run(event)
     end
 
     if trim(sName[9]) ~= "" then
-        lcd.drawText(rEdge +1 1, 36, trim(sName[9]) .. ":", SMLSIZE + RIGHT)
+        lcd.drawText(rEdge +1, 36, trim(sName[9]) .. ":", SMLSIZE + RIGHT)
         lcd.drawText(rEdge, 43, string.format("%.1f", curr) .. trim(sUnit[9]), SMLSIZE + RIGHT)
     end
 
