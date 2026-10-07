@@ -223,8 +223,9 @@ void loop() {
         const float gyroRollRate = ((float)gyroRawX / 131.0f) * ROLL_GYRO_SIGN;
         const float alpha = 0.98f;
         anglePitch = alpha * (anglePitch + gyroPitchRate * dt) + (1.0f - alpha) * accPitch;
-        angleRoll = wrapAngle(angleRoll + alpha * gyroRollRate * dt +
-                              (1.0f - alpha) * wrapAngle(accRoll - angleRoll));
+        const float rollAccNearest = angleRoll + wrapAngle(accRoll - angleRoll);
+        angleRoll = wrapAngle(alpha * (angleRoll + gyroRollRate * dt) +
+                              (1.0f - alpha) * rollAccNearest);
       }
 
       const float pitchRad = anglePitch * 0.01745329252f;

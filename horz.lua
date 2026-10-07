@@ -12,8 +12,10 @@ local calibrationStep, calibrationLevel = 0, nil
 local calibrationMessage = ""
 local axisMessage = ""
 local configSaveFailed = false
+local configLoadWarning = false
 local axisEditing = false
 local configLoaded = false
+local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
 -- V2: max. 338 Byte (77 fest + 9*29 je Slot); Leselimit 1024 laesst Reserve.
 local CONFIG_READ_LIMIT = 1024
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
@@ -98,7 +100,10 @@ local function loadConfig()
             for line in string.gmatch(contents, "[^\r\n]+") do
                 if firstLine then
                     firstLine = false
-                    if line ~= "HORZCFG=2" then break end
+                    if line ~= "HORZCFG=2" then
+                        configLoadWarning = true
+                        break
+                    end
                 else
                     local key, value = string.match(line, "^([^=]+)=(.*)$")
                     if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
@@ -161,6 +166,7 @@ local function saveConfig()
     end
     io.close(f)
     configSaveFailed = false
+    configLoadWarning = false
     return true
 end
 
@@ -216,7 +222,7 @@ local function cycleAxis(which, delta)
 end
 
 local function handleMenu(event)
-    if getTime() - menuOpenTime < 50 then return true end
+    if getTime() - menuOpenTime < MENU_OPEN_DEBOUNCE then return true end
     local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT
     local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT
     if editField > 0 then
@@ -399,8 +405,10 @@ local function drawMenu(event)
         "-- CONFIG (1/4) --", "-- SENSORS LEFT (2/4) --",
         "-- SENSORS RIGHT (3/4) --", "-- AXIS MAPPING (4/4) --"
     }
-    lcd.drawText(1, 1, configSaveFailed and "SAVE FAILED" or titles[menuPage],
-        configSaveFailed and (SMLSIZE + INVERS) or SMLSIZE)
+    local heading = configSaveFailed and "SAVE FAILED" or
+        (configLoadWarning and "OLD CFG: DEFAULTS" or titles[menuPage])
+    lcd.drawText(1, 1, heading, (configSaveFailed or configLoadWarning) and
+        (SMLSIZE + INVERS) or SMLSIZE)
     if calibrationStep > 0 then
         local values = vectorValues()
         lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
@@ -488,6 +496,7 @@ local function init()
     axisEditing = false
     calibrationStep, calibrationLevel, calibrationMessage = 0, nil, ""
     axisMessage, configSaveFailed = "", false
+    configLoadWarning = false
     configLoaded = false
 end
 
@@ -639,7 +648,8 @@ local function run(event)
     end
     lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
     lcd.drawText(128, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
-    if configSaveFailed then lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS) end
+    if configSaveFailed then lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
+    elseif configLoadWarning then lcd.drawText(52, 0, "OLD CFG", SMLSIZE + INVERS) end
     return 0
 end
 
