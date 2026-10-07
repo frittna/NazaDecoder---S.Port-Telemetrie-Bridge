@@ -605,12 +605,16 @@ local satelliteBase = {
     { 4, 0 }, { 5, 0 },
     { 1, 1 }, { 2, 1 }, { 3, 1 }, { 5, 1 },
     { 1, 2 }, { 4, 2 },
-    { 0, 3 }, { 2, 3 }, { 3, 3 }, { 4, 3 }, { 5, 3 }, { 7, 3 },
-    { 0, 4 }, { 1, 4 }, { 3, 4 }, { 4, 4 }, { 5, 4 }, { 7, 4 },
-    { 6, 5 }, { 5, 6 }, { 3, 7 }, { 4, 7 }
+    { 0, 3 }, { 2, 3 }, { 3, 3 }, { 4, 3 }, { 5, 3 },
+    { 0, 4 }, { 1, 4 }, { 3, 4 }, { 4, 4 }, { 5, 4 }
 }
-local satelliteInnerRays = { { 4, 9 }, { 5, 9 }, { 6, 8 }, { 7, 8 } }
-local satelliteOuterRays = { { 7, 7 }, { 8, 6 }, { 9, 5 }, { 9, 4 } }
+local satelliteInnerRays = {
+    { 7, 3 }, { 7, 4 }, { 6, 5 }, { 5, 6 }, { 3, 7 }, { 4, 7 }
+}
+local satelliteOuterRays = {
+    { 9, 4 }, { 9, 5 }, { 8, 6 }, { 7, 7 },
+    { 6, 8 }, { 7, 8 }, { 4, 9 }, { 5, 9 }
+}
 
 local function updateGPSWarning(fix, now)
     if gpsWarningSince and now - gpsWarningSince >= 6000 then
