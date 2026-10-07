@@ -36,6 +36,7 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 
 Im Sensor-Menü schalten `+/-` bei Slot-Quellen durch den Katalog; der Drehgeber bearbeitet einzelne Zeichen.
 Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspringt das aktuelle Feld und führt direkt zum nächsten.
+Auf Sensorseite 2 lässt sich `ALTIMETER` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert die 2,5-m-/5-m-Höhenstriche.
 
 Die Anzeige in der Horizontmitte lässt sich auf Menüseite 3 unter `Inside Hor.` auf einen Katalogsensor umstellen und über `Anzeige` abschalten. Standardmäßig ist sie aktiv und zeigt `Alt`.
 

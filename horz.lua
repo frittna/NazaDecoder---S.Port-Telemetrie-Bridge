@@ -4,6 +4,7 @@ local invPitch, invRoll, invHdg = 0, 0, 0
 local groundMode, attitudeMode = 0, 1
 local pitchSource, rollSource = "Ptch", "Roll"
 local insideSource, insideEnabled = "Alt", 1
+local altimeterSource = "Alt"
 -- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
 local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
 local filteredAlt, filteredHdg = 0, 0
@@ -19,7 +20,7 @@ local configLoadWarning = false
 local axisEditing = false
 local configLoaded = false
 local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
--- V2: ca. 355 Byte inklusive INSIDE; Leselimit 1024 laesst Reserve.
+-- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
 local CONFIG_READ_LIMIT = 1024
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
@@ -60,7 +61,7 @@ local headingLabels = {
     [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
     [180] = "S", [225] = "SW", [270] = "W", [315] = "NW"
 }
-local allowedChars = " AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVuWwXxYyZz0123456789-+_.:*()&$"  --leezeichen am Anfang ist für null-Abstand
+local allowedChars = " AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789-+_.:*()&$"  --leezeichen am Anfang ist für null-Abstand
 
 local function trim(str)
     if not str then return "" end
@@ -84,6 +85,7 @@ local function setDefaults()
     groundMode, attitudeMode = 0, 1
     pitchSource, rollSource = "Ptch", "Roll"
     insideSource, insideEnabled = "Alt", 1
+    altimeterSource = "Alt"
     fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
     for i = 1, 9 do
         sName[i], sSrc[i], sUnit[i] = defaults.names[i], defaults.sources[i], defaults.units[i]
@@ -149,6 +151,8 @@ local function loadConfig()
                         if source and validText(source, 4) then
                             insideSource, insideEnabled = source, tonumber(enabled)
                         end
+                    elseif key == "ALTIMETER" and validText(value, 4) then
+                        altimeterSource = value
                     elseif key == "AXES" then
                         local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
                         if fwd and side and down and validAxis(fwd) and validAxis(side) and validAxis(down) and
@@ -186,6 +190,7 @@ local function saveConfig()
     io.write(f, "GROUND=" .. groundMode .. "\n")
     io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
     io.write(f, "INSIDE=" .. insideSource .. "," .. insideEnabled .. "\n")
+    io.write(f, "ALTIMETER=" .. trim(altimeterSource) .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
     for i = 1, 9 do
         io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
@@ -212,7 +217,7 @@ end
 local function menuContentRows()
     if menuPage == 1 then return 7 end
     if menuPage == 2 then return 6 end
-    if menuPage == 3 then return 5 end
+    if menuPage == 3 then return 6 end
     return 4
 end
 
@@ -290,6 +295,10 @@ local function handleMenu(event)
             target = (selectedRow == 3) and "pitch" or "roll"
             text = (target == "pitch") and pitchSource or rollSource
             maxLen = 4
+        elseif menuPage == 3 and selectedRow == 6 and editField == 5 then
+            target = "altimeter"
+            text = altimeterSource
+            maxLen = 4
         else
             local slot = slotIndex()
             target = (editField == 1) and "name" or ((editField == 2) and "source" or "unit")
@@ -307,6 +316,7 @@ local function handleMenu(event)
             local updated = changeChar(padStr(text, maxLen), editCharIdx, negative and -1 or 1)
             if menuPage == 1 then
                 if target == "pitch" then pitchSource = trim(updated) else rollSource = trim(updated) end
+            elseif target == "altimeter" then altimeterSource = trim(updated)
             elseif target == "name" then sName[slotIndex()] = trim(updated)
             elseif target == "source" then sSrc[slotIndex()] = trim(updated)
             else sUnit[slotIndex()] = trim(updated) end
@@ -363,6 +373,9 @@ local function handleMenu(event)
             elseif menuPage == 3 and selectedRow == 5 then
                 insideEnabled = 1 - insideEnabled
                 saveConfig()
+            elseif menuPage == 3 and selectedRow == 6 then
+                editField = 5
+                editCharIdx = 1
             else
                 editField = 1
                 editCharIdx = 1
@@ -471,12 +484,12 @@ end
 
 local function drawMenu(event)
     local titles = {
-        "-- CONFIG (1/4) --", "-- SENSORS LEFT (2/4) --",
-        "-- SENSORS RIGHT (3/4) --", "-- AXIS MAPPING (4/4) --"
+        "--CONFIG PAGE--", "--SENSOR PAGE 1--",
+        "--SENSOR PAGE 2--", "--AXIS MAPPING--"
     }
     local heading = configSaveFailed and "SAVE FAILED" or
         (configLoadWarning and "OLD CFG: DEFAULTS" or titles[menuPage])
-    lcd.drawText(1, 1, heading, INVERS + ((configSaveFailed or configLoadWarning) and SMLSIZE or 0))
+    lcd.drawText(1, 1, heading, INVERS + SMLSIZE)
     if calibrationStep > 0 then
         local values = vectorValues()
         lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
@@ -551,6 +564,13 @@ local function drawMenu(event)
                 (enabledSelected and editField == 0) and INVERS or 0)
             lcd.drawText(127, enabledRowY, (insideEnabled == 1) and "[X]" or "[ ]",
                 RIGHT + ((enabledSelected and editField == 0) and INVERS or 0))
+            local altimeterSelected = selectedRow == 6
+            local altimeterValue = (altimeterSelected and editField == 5) and
+                editDisplay(altimeterSource, 4) or ("[" .. altimeterSource .. "]")
+            lcd.drawText(9, 50, "ALTIMETER:", SMLSIZE +
+                ((altimeterSelected and editField == 0) and INVERS or 0))
+            lcd.drawText(127, 50, altimeterValue, RIGHT + SMLSIZE +
+                ((altimeterSelected and editField == 5) and INVERS or 0))
         end
     else
         local rows = {
@@ -791,8 +811,8 @@ local function run(event)
     lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
-    local alt = filteredAlt
-    if string.lower(trim(sSrc[2])) == "alt" then
+    if trim(altimeterSource) ~= "" then
+        local alt = readSlot(trim(altimeterSource), "")
         local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
         local tickStep = sizeH / 2
         for tick = -4, 4 do
