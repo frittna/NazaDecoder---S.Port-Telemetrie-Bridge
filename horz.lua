@@ -293,7 +293,7 @@ local function handleMenu(event)
             target = (editField == 1) and "name" or ((editField == 2) and "source" or "unit")
             text = (target == "name" and sName[slot]) or
                 (target == "source" and sSrc[slot]) or sUnit[slot]
-            maxLen = (target == "name") and SLOT_NAME_MAX or ((target == "unit") and 3 or 4)
+            maxLen = (target == "name") and SLOT_NAME_VISIBLE or ((target == "unit") and 3 or 4)
         end
         -- Bei Slot-Quellen waehlt +/- Katalogsensoren; der Drehgeber editiert Zeichen.
         local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
@@ -308,8 +308,11 @@ local function handleMenu(event)
             elseif target == "name" then sName[slotIndex()] = trim(updated)
             elseif target == "source" then sSrc[slotIndex()] = trim(updated)
             else sUnit[slotIndex()] = trim(updated) end
-        elseif event == EVT_ENTER_LONG and menuPage ~= 1 and editField == 2 then
-            cycleCatalog(slotIndex(), 1)
+        elseif event == EVT_ENTER_LONG then
+            editCharIdx = 1
+            editField = editField + 1
+            local final = (menuPage == 1) and 1 or 3
+            if editField > final then editField = 0; saveConfig() end
         elseif event == EVT_ENTER_BREAK then
             editCharIdx = editCharIdx + 1
             if editCharIdx > maxLen then
