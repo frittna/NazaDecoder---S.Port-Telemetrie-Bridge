@@ -14,7 +14,7 @@
 #include <NazaDecoder.h>
 
 // Montageanpassung: Index 0/1/2 = gX/gY/gZ; Vorzeichen nach Bedarf ändern.
-// Standard: X=gX, Y=gY, Z=-gZ (FrSky: Z zeigt bei Label oben etwa -1 g).
+// Standard: X=gX, Y=gY, Z=gZ; gZ ist bei Modell-Level bereits etwa -1 g.
 #define SPORT_X_SOURCE 0
 #define SPORT_X_SIGN 1
 #define SPORT_Y_SOURCE 1
@@ -223,7 +223,7 @@ void loop() {
 
       const float pitchRad = anglePitch * 0.01745329252f;
       const float rollRad = angleRoll * 0.01745329252f;
-      // Fusion erzeugt die kanonische Schwerkraft; gZ wird für FrSky zunächst negiert.
+      // Fusion erzeugt die kanonische Schwerkraft mit negativem Z bei Modell-Level.
       const float gravity[3] = {
         -sinf(pitchRad),
         sinf(rollRad) * cosf(pitchRad),
