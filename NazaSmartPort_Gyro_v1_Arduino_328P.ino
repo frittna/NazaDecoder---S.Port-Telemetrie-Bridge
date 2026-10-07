@@ -89,9 +89,15 @@ static uint32_t warmupCompleteLedStart = 0;
 static uint32_t ledPulseStart = 0;
 static uint32_t lastUpdate = 0;
 static uint32_t lastFilterTime = 0;
+static float gyroBiasX = 0.0f;
+static float gyroBiasY = 0.0f;
+static float gyroBiasSumX = 0.0f;
+static float gyroBiasSumY = 0.0f;
+static uint16_t gyroBiasSamples = 0;
 static const uint32_t LED_PULSE_DURATION = 50UL;
 static const uint32_t WARMUP_LED_DURATION = 1500UL;
 static bool gyroWarmedUp = false;
+static bool gyroBiasReady = false;
 static bool angleInitialized = false;
 static float anglePitch = 0.0f;
 static float angleRoll = 0.0f;
@@ -215,13 +221,32 @@ void loop() {
       const float dt = (float)(filterNow - lastFilterTime) / 1000.0f;
       lastFilterTime = filterNow;
 
+      if (!gyroBiasReady) {
+        if ((uint32_t)(filterNow - systemStartTime) < GYRO_WARMUP_TIME) {
+          gyroBiasSumX += (float)gyroRawX;
+          gyroBiasSumY += (float)gyroRawY;
+          if (gyroBiasSamples < 65535U) gyroBiasSamples++;
+        } else if (gyroBiasSamples > 0) {
+          gyroBiasX = gyroBiasSumX / gyroBiasSamples;
+          gyroBiasY = gyroBiasSumY / gyroBiasSamples;
+          gyroBiasReady = true;
+          gyroWarmedUp = true;
+          warmupCompleteLedStart = filterNow;
+          digitalWrite(LED_BUILTIN, HIGH);
+        }
+      }
+
       if (!angleInitialized || dt <= 0.0f || dt > 0.25f) {
         anglePitch = accPitch;
         angleRoll = accRoll;
         angleInitialized = true;
+      } else if (!gyroBiasReady) {
+        // Während des stillen Warm-ups nur Acc-Winkel nutzen, keinen ungeeichten Gyro integrieren.
+        anglePitch = accPitch;
+        angleRoll = accRoll;
       } else {
-        const float gyroPitchRate = ((float)gyroRawY / 131.0f) * PITCH_GYRO_SIGN;
-        const float gyroRollRate = ((float)gyroRawX / 131.0f) * ROLL_GYRO_SIGN;
+        const float gyroPitchRate = (((float)gyroRawY - gyroBiasY) / 131.0f) * PITCH_GYRO_SIGN;
+        const float gyroRollRate = (((float)gyroRawX - gyroBiasX) / 131.0f) * ROLL_GYRO_SIGN;
         const float alpha = 0.98f;
         anglePitch = alpha * (anglePitch + gyroPitchRate * dt) + (1.0f - alpha) * accPitch;
         const float rollAccNearest = angleRoll + wrapAngle(accRoll - angleRoll);
@@ -242,12 +267,6 @@ void loop() {
       const float outZ = gravity[SPORT_Z_SOURCE] * SPORT_Z_SIGN;
       gyroSensor.setData(outX, outY, outZ);
     }
-  }
-
-  if (!gyroWarmedUp && now - systemStartTime >= GYRO_WARMUP_TIME) {
-    gyroWarmedUp = true;
-    warmupCompleteLedStart = now;
-    digitalWrite(LED_BUILTIN, HIGH);
   }
 
 #if USE_TESTDATA == 1
