@@ -278,7 +278,15 @@ local function handleMenu(event)
 end
 
 local function vectorValues()
-    return { getValue("AccX") or 0, getValue("AccY") or 0, getValue("AccZ") or 0 }
+    return {
+        tonumber(getValue("AccX")) or 0,
+        tonumber(getValue("AccY")) or 0,
+        tonumber(getValue("AccZ")) or 0
+    }
+end
+
+local function vectorMagnitude(values)
+    return math.sqrt(values[1] * values[1] + values[2] * values[2] + values[3] * values[3])
 end
 
 local function axisValue(values, setting)
@@ -290,22 +298,29 @@ end
 local function calibrate(event)
     local values = vectorValues()
     if calibrationStep == 1 and event == EVT_ENTER_BREAK then
-        local index = 1
-        if math.abs(values[2]) > math.abs(values[index]) then index = 2 end
-        if math.abs(values[3]) > math.abs(values[index]) then index = 3 end
-        if math.abs(values[index]) < 0.15 then
+        local magnitude = vectorMagnitude(values)
+        if magnitude < 0.001 then
             calibrationMessage = "Acc-Signal fehlt"
             return
         end
+        local index = 1
+        if math.abs(values[2]) > math.abs(values[index]) then index = 2 end
+        if math.abs(values[3]) > math.abs(values[index]) then index = 3 end
         local axis = ({ "X", "Y", "Z" })[index]
         downAxis = axis .. ((values[index] >= 0) and "+" or "-")
-        calibrationLevel = { values = values, down = index }
+        calibrationLevel = { values = values, down = index, magnitude = magnitude }
         calibrationStep = 2
         calibrationMessage = "Level erfasst"
     elseif calibrationStep == 2 and (event == EVT_ENTER_BREAK) then
         local remain = {}
         for i = 1, 3 do if i ~= calibrationLevel.down then remain[#remain + 1] = i end end
-        if math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2) < 0.15 then
+        local magnitude = vectorMagnitude(values)
+        local tilt = math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2)
+        if magnitude < calibrationLevel.magnitude * 0.5 then
+            calibrationMessage = "Acc-Signal fehlt"
+            return
+        end
+        if tilt < magnitude * 0.15 then
             calibrationMessage = "Nase staerker neigen"
             return
         end
