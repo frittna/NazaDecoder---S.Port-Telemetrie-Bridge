@@ -103,15 +103,14 @@ local function loadConfig()
     configLoadWarning = false
     local f = io.open(modelPath(), "r")
     if f then
-        local chunks, total = {}, 0
+        local contents, total = "", 0
         while total < CONFIG_READ_LIMIT do
             local chunk = io.read(f, math.min(128, CONFIG_READ_LIMIT - total))
             if not chunk or #chunk == 0 then break end
-            chunks[#chunks + 1] = chunk
+            contents = contents .. chunk
             total = total + #chunk
         end
         io.close(f)
-        local contents = table.concat(chunks)
         if contents then
             local firstLine = true
             for line in string.gmatch(contents, "[^\r\n]+") do
@@ -435,8 +434,7 @@ local function drawMenu(event)
     }
     local heading = configSaveFailed and "SAVE FAILED" or
         (configLoadWarning and "OLD CFG: DEFAULTS" or titles[menuPage])
-    lcd.drawText(1, 1, heading, (configSaveFailed or configLoadWarning) and
-        (SMLSIZE + INVERS) or SMLSIZE)
+    lcd.drawText(1, 1, heading, INVERS + ((configSaveFailed or configLoadWarning) and SMLSIZE or 0))
     if calibrationStep > 0 then
         local values = vectorValues()
         lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
@@ -458,7 +456,7 @@ local function drawMenu(event)
         for i = 1, #rows do
             local y = 9 + (i - 1) * 7
             local selected = i == selectedRow
-            lcd.drawText(1, y, selected and ">" or " ", selected and INVERS or 0)
+            lcd.drawText(1, y, " ", 0)
             lcd.drawText(8, y, rows[i][1], selected and editField == 0 and INVERS or 0)
             local value = rows[i][2]
             local valueX = (i == 3 or i == 4) and 77 or 73
