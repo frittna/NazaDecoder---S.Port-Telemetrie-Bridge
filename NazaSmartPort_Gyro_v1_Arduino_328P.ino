@@ -21,6 +21,8 @@
 #define SPORT_Y_SIGN 1
 #define SPORT_Z_SOURCE 2
 #define SPORT_Z_SIGN 1
+// Der Empfänger zeigt bei 100 bisher nur etwa 0,1 g; 1000 liefert den vollen g-Wert.
+#define ACC_SPORT_SCALE 1000.0f
 #define PITCH_GYRO_SIGN 1
 #define ROLL_GYRO_SIGN 1
 
@@ -37,9 +39,9 @@ public:
       accXData(0), accYData(0), accZData(0), sendStage(0) {}
 
   void setData(float accX, float accY, float accZ) {
-    accXData = (int32_t)(accX * 100.0f);
-    accYData = (int32_t)(accY * 100.0f);
-    accZData = (int32_t)(accZ * 100.0f);
+    accXData = (int32_t)(accX * ACC_SPORT_SCALE);
+    accYData = (int32_t)(accY * ACC_SPORT_SCALE);
+    accZData = (int32_t)(accZ * ACC_SPORT_SCALE);
   }
 
   virtual uint16_t send(FrSkySportSingleWireSerial& serial, uint8_t id, uint32_t now) {
