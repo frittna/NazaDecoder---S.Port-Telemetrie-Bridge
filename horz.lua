@@ -40,14 +40,15 @@ local catalog = {
     { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
     { "GSpd", "%.0f", 1.852, "kmh" }, { "Dist", "%.0f", 1, "m" },
     { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "°" },
-    { "Cels", "%.1f", 1, "V" }, { "VFAS", "%.1f", 1, "V" },
-    { "Curr", "%.1f", 1, "A" }, { "Sats", "%.0f", 1, "" },
-    { "GFix", "%.0f", 1, "" }, { "Ptch", "%.0f", 1, "°" },
-    { "Roll", "%.0f", 1, "°" }, { "AccX", "%.2f", 1, "g" },
-    { "AccY", "%.2f", 1, "g" }, { "AccZ", "%.2f", 1, "g" },
+    { "Cels", "%.1f", 1, "V" }, { "celD", "%.2f", 1, "V" },
+    { "VFAS", "%.1f", 1, "V" }, { "Curr", "%.1f", 1, "A" },
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
-    { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" },
-    { "celD", "%.2f", 1, "V" }, { "GAlt", "%.1f", 1, "m" }
+    { "Ptch", "%.0f", 1, "°" }, { "Roll", "%.0f", 1, "°" }, 
+    { "AccX", "%.2f", 1, "g" }, { "AccY", "%.2f", 1, "g" },
+    { "AccZ", "%.2f", 1, "g" }, { "GAlt", "%.1f", 1, "m" },
+    { "Sats", "%.0f", 1, "" }, { "GFix", "%.0f", 1, "" },
+    { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
+      
 }
 local catalogByName = {}
 for i = 1, #catalog do
@@ -58,7 +59,7 @@ local headingLabels = {
     [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
     [180] = "S", [225] = "SW", [270] = "W", [315] = "NW"
 }
-local allowedChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-+_.:*()&$"
+local allowedChars = " AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVuWwXxYyZz0123456789-+_.:*()&$"  --leezeichen am Anfang ist für null-Abstand
 
 local function trim(str)
     if not str then return "" end
