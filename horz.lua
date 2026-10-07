@@ -154,10 +154,10 @@ local function slotIndex()
 end
 
 local function menuRows()
-    if menuPage == 1 then return 8 end
-    if menuPage == 2 then return 7 end
-    if menuPage == 3 then return 4 end
-    return 5
+    if menuPage == 1 then return 7 end
+    if menuPage == 2 then return 6 end
+    if menuPage == 3 then return 3 end
+    return 4
 end
 
 local function cycleCatalog(slot, delta)
@@ -252,13 +252,12 @@ local function handleMenu(event)
             elseif selectedRow == 5 then invRoll = 1 - invRoll
             elseif selectedRow == 6 then invHdg = 1 - invHdg
             elseif selectedRow == 7 then groundMode = (groundMode + 1) % 3
-            else menuPage = 2; selectedRow = 1 end
         elseif menuPage == 2 then
-            if selectedRow <= 6 then editField = 1; editCharIdx = 1
-            else menuPage = 3; selectedRow = 1 end
+            editField = 1
+            editCharIdx = 1
         elseif menuPage == 3 then
-            if selectedRow <= 3 then editField = 1; editCharIdx = 1
-            else menuPage = 4; selectedRow = 1 end
+            editField = 1
+            editCharIdx = 1
         elseif menuPage == 4 then
             if selectedRow <= 3 then
                 if axisEditing then
@@ -276,7 +275,7 @@ local function handleMenu(event)
                 calibrationStep = 1
                 calibrationLevel = nil
                 calibrationMessage = ""
-            else menuPage = 1; selectedRow = 1; axisEditing = false end
+            end
         end
         saveConfig()
     end
@@ -352,8 +351,19 @@ local function calibrate(event)
     end
 end
 
+local function editDisplay(value, length)
+    local padded = padStr(value, length)
+    return string.sub(padded, 1, editCharIdx - 1) .. "[" ..
+        string.sub(padded, editCharIdx, editCharIdx) .. "]" ..
+        string.sub(padded, editCharIdx + 1)
+end
+
 local function drawMenu(event)
-    lcd.drawText(1, 1, "-- CONFIG " .. menuPage .. "/4 --", INVERS)
+    local titles = {
+        "-- CONFIG (1/4) --", "-- SENSORS LEFT (2/4) --",
+        "-- SENSORS RIGHT (3/4) --", "-- AXIS MAPPING (4/4) --"
+    }
+    lcd.drawText(1, 1, titles[menuPage], SMLSIZE)
     if calibrationStep > 0 then
         local values = vectorValues()
         lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
@@ -361,48 +371,71 @@ local function drawMenu(event)
             tonumber(values[1]) or 0, tonumber(values[2]) or 0, tonumber(values[3]) or 0), SMLSIZE)
         lcd.drawText(1, 36, calibrationMessage, INVERS)
         lcd.drawText(1, 50, "ENTER: messen EXIT: Ende", SMLSIZE)
+        lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT)
         return
     end
-    local rows
     if menuPage == 1 then
-        rows = {
-            "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR"),
-            "Pitch src: " .. pitchSource, "Roll src: " .. rollSource,
-            "Pitch inv: " .. (invPitch == 1 and "YES" or "NO"),
-            "Roll inv : " .. (invRoll == 1 and "YES" or "NO"),
-            "Hdg inv  : " .. (invHdg == 1 and "YES" or "NO"),
-            "Ground   : " .. ({ "White", "Lines", "Points" })[groundMode + 1],
-            "[scroll]"
+        local rows = {
+            { "Attitude:", (attitudeMode == 1) and "ANGLES" or "VECTOR" },
+            { "Pitch src:", pitchSource }, { "Roll src:", rollSource },
+            { "Pitch inv:", (invPitch == 1) and "YES" or "NO" },
+            { "Roll inv:", (invRoll == 1) and "YES" or "NO" },
+            { "Hdg inv:", (invHdg == 1) and "YES" or "NO" },
+            { "Ground:", ({ "White", "Lines", "Points" })[groundMode + 1] }
         }
+        for i = 1, #rows do
+            local y = 9 + (i - 1) * 7
+            local selected = i == selectedRow
+            lcd.drawText(1, y, selected and ">" or " ", selected and INVERS or 0)
+            lcd.drawText(8, y, rows[i][1], selected and editField == 0 and INVERS or 0)
+            local value = rows[i][2]
+            local valueX = (i == 2 or i == 3) and 77 or 73
+            if editField > 0 and (i == 2 or i == 3) then
+                local source = (i == 2) and pitchSource or rollSource
+                lcd.drawText(valueX, y, editDisplay(source, 4), INVERS + SMLSIZE)
+            else
+                lcd.drawText(valueX, y, value, 0)
+            end
+        end
     elseif menuPage == 2 or menuPage == 3 then
-        rows = {}
         local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
         for i = first, last do
-            rows[#rows + 1] = padStr(sName[i], 4) .. " " .. padStr(sSrc[i], 4) .. " [" .. sUnit[i] .. "]"
+            local row = (menuPage == 2) and i or (i - 6)
+            local y = 10 + (row - 1) * 8
+            local selected = row == selectedRow
+            local prefix = selected and ">" or " "
+            lcd.drawText(1, y, prefix, selected and INVERS or 0)
+            local name = string.sub(trim(sName[i]), 1, 4)
+            local source = trim(sSrc[i])
+            local unit = trim(sUnit[i])
+            local nameText, sourceText, unitText = name, source, unit
+            if selected and editField > 0 then
+                if editField == 1 then nameText = editDisplay(name, 4)
+                elseif editField == 2 then sourceText = editDisplay(source, 4)
+                else unitText = editDisplay(unit, 3) end
+            end
+            lcd.drawText(9, y, nameText, (selected and editField == 1) and INVERS or 0)
+            lcd.drawText(29, y, ":", 0)
+            lcd.drawText(35, y, sourceText, (selected and editField == 2) and INVERS or 0)
+            lcd.drawText(72, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
         end
-        rows[#rows + 1] = "[scroll]"
     else
-        rows = { "Fwd" .. (axisEditing and selectedRow == 1 and "*" or " ") .. ": " .. fwdAxis,
-            "Side" .. (axisEditing and selectedRow == 2 and "*" or " ") .. ": " .. sideAxis,
-            "Down" .. (axisEditing and selectedRow == 3 and "*" or " ") .. ": " .. downAxis,
-            "Calibrate", "[scroll]" }
-    end
-    local y = 10
-    for i = 1, #rows do
-        local prefix = (i == selectedRow) and "> " or "  "
-        local text = prefix .. rows[i]
-        if editField > 0 and i == selectedRow then
-            local value = (menuPage == 1) and ((selectedRow == 2) and pitchSource or rollSource) or
-                ((editField == 1 and sName[slotIndex()]) or (editField == 2 and sSrc[slotIndex()]) or sUnit[slotIndex()])
-            local cursor = string.sub(value, 1, editCharIdx - 1) .. "_" .. string.sub(value, editCharIdx + 1)
-            text = prefix .. cursor
+        local rows = {
+            "Fwd : " .. fwdAxis, "Side: " .. sideAxis,
+            "Down: " .. downAxis, "Calibrate"
+        }
+        for i = 1, #rows do
+            local y = 10 + (i - 1) * 8
+            local selected = i == selectedRow
+            lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
         end
-        lcd.drawText(1, y, text, (i == selectedRow) and INVERS or 0)
-        y = y + 7
+        lcd.drawText(1, 44, "Manuell: +/- Achse, ENTER Vorzeichen", SMLSIZE)
+        lcd.drawText(1, 52, "Calibrate: Level, dann Nase abwaerts", SMLSIZE)
     end
     if menuPage == 4 and calibrationMessage ~= "" then
-        lcd.drawText(1, 55, calibrationMessage, SMLSIZE)
+        lcd.drawText(1, 44, calibrationMessage, SMLSIZE)
     end
+    lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT)
 end
 
 local function init()
