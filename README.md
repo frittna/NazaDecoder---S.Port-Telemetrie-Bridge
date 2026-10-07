@@ -36,6 +36,8 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 
 Im Sensor-Menü schalten `+/-` bei Slot-Quellen durch den Katalog; der Drehgeber bearbeitet einzelne Zeichen.
 
+Die Anzeige in der Horizontmitte lässt sich auf Menüseite 3 unter `Inside Hor.` auf einen Katalogsensor umstellen und über `Anzeige` abschalten. Standardmäßig ist sie aktiv und zeigt `Alt`.
+
 Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
 ### Programmierung bei 328P

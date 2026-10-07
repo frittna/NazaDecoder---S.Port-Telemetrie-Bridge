@@ -3,6 +3,7 @@
 local invPitch, invRoll, invHdg = 0, 0, 0
 local groundMode, attitudeMode = 0, 1
 local pitchSource, rollSource = "Ptch", "Roll"
+local insideSource, insideEnabled = "Alt", 1
 -- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
 local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
 local filteredAlt, filteredHdg = 0, 0
@@ -16,7 +17,7 @@ local configLoadWarning = false
 local axisEditing = false
 local configLoaded = false
 local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
--- V2: max. 338 Byte (77 fest + 9*29 je Slot); Leselimit 1024 laesst Reserve.
+-- V2: ca. 355 Byte inklusive INSIDE; Leselimit 1024 laesst Reserve.
 local CONFIG_READ_LIMIT = 1024
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
@@ -79,6 +80,7 @@ local function setDefaults()
     invPitch, invRoll, invHdg = 0, 0, 0
     groundMode, attitudeMode = 0, 1
     pitchSource, rollSource = "Ptch", "Roll"
+    insideSource, insideEnabled = "Alt", 1
     fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
     for i = 1, 9 do
         sName[i], sSrc[i], sUnit[i] = defaults.names[i], defaults.sources[i], defaults.units[i]
@@ -139,6 +141,11 @@ local function loadConfig()
                         if p ~= nil and r ~= nil and validText(p, 4) and validText(r, 4) then
                             pitchSource, rollSource = p, r
                         end
+                    elseif key == "INSIDE" then
+                        local source, enabled = string.match(value, "^(.-),([01])$")
+                        if source and validText(source, 4) then
+                            insideSource, insideEnabled = source, tonumber(enabled)
+                        end
                     elseif key == "AXES" then
                         local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
                         if fwd and side and down and validAxis(fwd) and validAxis(side) and validAxis(down) and
@@ -175,6 +182,7 @@ local function saveConfig()
     io.write(f, "INVERT=" .. invPitch .. "," .. invRoll .. "," .. invHdg .. "\n")
     io.write(f, "GROUND=" .. groundMode .. "\n")
     io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
+    io.write(f, "INSIDE=" .. insideSource .. "," .. insideEnabled .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
     for i = 1, 9 do
         io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
@@ -201,7 +209,7 @@ end
 local function menuContentRows()
     if menuPage == 1 then return 7 end
     if menuPage == 2 then return 6 end
-    if menuPage == 3 then return 3 end
+    if menuPage == 3 then return 5 end
     return 4
 end
 
@@ -229,6 +237,18 @@ local function cycleCatalog(slot, delta)
     sUnit[slot] = catalog[found][4]
 end
 
+local function cycleInsideSource(delta)
+    local found = 1
+    for i = 1, #catalog do
+        if string.lower(catalog[i][1]) == string.lower(trim(insideSource)) then
+            found = i
+            break
+        end
+    end
+    found = math.max(1, math.min(#catalog, found + delta))
+    insideSource = catalog[found][1]
+end
+
 local function cycleAxis(which, delta)
     local current = (which == 1) and fwdAxis or ((which == 2) and sideAxis or downAxis)
     local sign = string.sub(current, 2, 2)
@@ -253,6 +273,15 @@ local function handleMenu(event)
     local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT or event == EVT_VIRTUAL_PREV
     local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
     if editField > 0 then
+        if menuPage == 3 and selectedRow == 4 and editField == 4 then
+            if negative or positive then
+                cycleInsideSource(positive and 1 or -1)
+            elseif event == EVT_ENTER_BREAK or event == EVT_EXIT_BREAK then
+                editField = 0
+                saveConfig()
+            end
+            return true
+        end
         local text, maxLen, target
         if menuPage == 1 then
             target = (selectedRow == 3) and "pitch" or "roll"
@@ -323,8 +352,15 @@ local function handleMenu(event)
             end
             if selectedRow <= 2 or selectedRow >= 5 then saveConfig() end
         elseif menuPage == 2 or menuPage == 3 then
-            editField = 1
-            editCharIdx = 1
+            if menuPage == 3 and selectedRow == 4 then
+                editField = 4
+            elseif menuPage == 3 and selectedRow == 5 then
+                insideEnabled = 1 - insideEnabled
+                saveConfig()
+            else
+                editField = 1
+                editCharIdx = 1
+            end
         elseif menuPage == 4 then
             if selectedRow <= 3 then
                 if axisEditing then
@@ -494,6 +530,22 @@ local function drawMenu(event)
             lcd.drawText(41, y, sourceText, (selected and editField == 2) and INVERS or 0)
             lcd.drawText(72, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
         end
+        if menuPage == 3 then
+            local sourceRowY, enabledRowY = 34, 42
+            local sourceSelected = selectedRow == 4
+            local enabledSelected = selectedRow == 5
+            lcd.drawText(1, sourceRowY, sourceSelected and ">" or " ", sourceSelected and INVERS or 0)
+            lcd.drawText(9, sourceRowY, "Inside Hor.",
+                (sourceSelected and editField == 0) and INVERS or 0)
+            lcd.drawText(127, sourceRowY, "[" .. insideSource .. "]",
+                RIGHT + ((sourceSelected and editField == 4) and INVERS or 0))
+            lcd.drawText(1, enabledRowY, enabledSelected and ">" or " ",
+                enabledSelected and INVERS or 0)
+            lcd.drawText(9, enabledRowY, "Anzeige:",
+                (enabledSelected and editField == 0) and INVERS or 0)
+            lcd.drawText(127, enabledRowY, (insideEnabled == 1) and "[X]" or "[ ]",
+                RIGHT + ((enabledSelected and editField == 0) and INVERS or 0))
+        end
     else
         local rows = {
             "Fwd : " .. fwdAxis, "Side: " .. sideAxis,
@@ -636,8 +688,15 @@ local function run(event)
     lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", tonumber(getValue("Sats")) or 0), SMLSIZE)
     local fix = tonumber(getValue("GFix")) or 0
     lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
-    lcd.drawText(cx, cy - 13, trim(sName[2]) .. ":" ..
-        string.format(slotFormats[2], alt) .. trim(sUnit[2]), SMLSIZE + CENTER)
+    if insideEnabled == 1 then
+        local entry = catalogByName[string.lower(trim(insideSource))]
+        local insideUnit = entry and entry[4] or ""
+        local insideValue, insideFormat = readSlot(trim(insideSource), insideUnit)
+        if string.lower(trim(insideSource)) == "alt" then insideValue = filteredAlt end
+        local insideName = entry and entry[1] or trim(insideSource)
+        lcd.drawText(cx, cy - 13, insideName .. ":" ..
+            string.format(insideFormat, insideValue) .. insideUnit, SMLSIZE + CENTER)
+    end
 
     local yBottom = cy - sizeH - 1
     lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)
