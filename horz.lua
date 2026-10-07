@@ -1,373 +1,433 @@
--- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) --              @frittna 06.Okt.2026
----> Das LUA Script ist entsanden mit dem Projekt https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge
+-- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 07.Okt.2026
 
-local invPitch     = 0
-local invRoll      = 0
-local invHdg       = 0
-local groundMode   = 0
-local filteredAlt  = 0
-local filteredHdg  = 0
-
--- Achsen-Mapping (1 = AccX, 2 = AccY, 3 = AccZ)
-local mapPitch     = 1
-local mapRoll      = 2
-
--- Dynamisches Sensor-Array für volle Konfigurierbarkeit (Exakt 4, 4 und 3 Zeichen reserviert)
-local sName        = { "RSSI", "Alt ", "Spd ", "Dist", "VSpd", "Hdg ", "Batt", "CellD", " Amp" }
-local sSrc         = { "RSSI", "Alt ", "Gspd", "Dist", "VSpd", "Hdg ", "Cels", "celD", "Curr" }
-local sUnit        = { "dB ", "m  ", "kmh", "m  ", "m/s", "°  ", "V  ", "V  ", "A  " }
-
--- Menü-Steuerungsvariablen
-local menuActive   = false
-local menuPage     = 1
-local selectedRow  = 1
-local editField    = 0
-local editCharIdx  = 1
-local menuOpenTime = 0
+local invPitch, invRoll, invHdg = 0, 0, 0
+local groundMode, attitudeMode = 0, 1
+local pitchSource, rollSource = "Ptch", "Roll"
+local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
+local filteredAlt, filteredHdg = 0, 0
+local menuActive, menuPage, selectedRow = false, 1, 1
+local editField, editCharIdx, menuOpenTime = 0, 1, 0
+local calibrationStep, calibrationLevel = 0, nil
 local configLoaded = false
 
--- HILFSFUNKTIONEN
-local function padStr(str, len)
-    str = (str == nil) and "" or tostring(str)
-    while #str < len do str = str .. " " end
-    return string.sub(str, 1, len)
-end
+local defaults = {
+    names = { "RSSI", "Alt", "Spd", "Dist", "VSpd", "Hdg", "Batt", "CellD", "Amp" },
+    sources = { "RSSI", "Alt", "GSpd", "Dist", "VSpd", "Hdg", "Cels", "celD", "Curr" },
+    units = { "dB", "m", "kmh", "m", "m/s", "deg", "V", "V", "A" }
+}
+local sName, sSrc, sUnit = {}, {}, {}
+
+local catalog = {
+    { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
+    { "GSpd", "%.0f", 1.852, "kmh" }, { "Dist", "%.0f", 1, "m" },
+    { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "deg" },
+    { "Cels", "%.2f", 1, "V" }, { "VFAS", "%.1f", 1, "V" },
+    { "Curr", "%.1f", 1, "A" }, { "Sats", "%.0f", 1, "" },
+    { "GFix", "%.0f", 1, "" }, { "Ptch", "%.0f", 1, "deg" },
+    { "Roll", "%.0f", 1, "deg" }, { "AccX", "%.2f", 1, "g" },
+    { "AccY", "%.2f", 1, "g" }, { "AccZ", "%.2f", 1, "g" },
+    { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
+    { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
+}
+local allowedChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/%:-_.+"
 
 local function trim(str)
     if not str then return "" end
-    return string.gsub(str, "^%s*(.-)%s*$", "%1")
+    return (string.gsub(tostring(str), "^%s*(.-)%s*$", "%1"))
 end
 
--- 1. ERWEITERTE LADE-ROUTINE
+local function padStr(str, len)
+    str = tostring(str or "")
+    if #str < len then str = str .. string.rep(" ", len - #str) end
+    return string.sub(str, 1, len)
+end
+
+local function modelPath()
+    local info = model.getInfo()
+    local name = string.gsub((info and info.name) or "model", "[ %c%p]", "_")
+    return "/LOGS/hz_" .. name .. ".txt"
+end
+
+local function setDefaults()
+    invPitch, invRoll, invHdg = 0, 0, 0
+    groundMode, attitudeMode = 0, 1
+    pitchSource, rollSource = "Ptch", "Roll"
+    fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
+    for i = 1, 9 do
+        sName[i], sSrc[i], sUnit[i] = defaults.names[i], defaults.sources[i], defaults.units[i]
+    end
+end
+
+local function validAxis(value)
+    return value == "X+" or value == "X-" or value == "Y+" or value == "Y-" or
+        value == "Z+" or value == "Z-"
+end
+
 local function loadConfig()
-    local modelInfo = model.getInfo()
-    local modelName = string.gsub(modelInfo.name, "[ %c%p]", "_")
-    local configPath = "/LOGS/hz_" .. modelName .. ".txt"
-
-    local f = io.open(configPath, "r")
+    setDefaults()
+    local f = io.open(modelPath(), "r")
     if f then
-        invPitch = tonumber(io.read(f, 1)) or 0; io.read(f, 1)
-        invRoll = tonumber(io.read(f, 1)) or 0; io.read(f, 1)
-        invHdg = tonumber(io.read(f, 1)) or 0; io.read(f, 1)
-        groundMode = tonumber(io.read(f, 1)) or 0; io.read(f, 1)
-        mapPitch = tonumber(io.read(f, 1)) or 1; io.read(f, 1)
-        mapRoll = tonumber(io.read(f, 1)) or 2; io.read(f, 1)
-
-        for i = 1, 9 do
-            sName[i] = padStr(io.read(f, 4) or sName[i], 4); io.read(f, 1)
-            sSrc[i] = padStr(io.read(f, 4) or sSrc[i], 4); io.read(f, 1)
-            sUnit[i] = padStr(io.read(f, 3) or sUnit[i], 3); io.read(f, 1)
+        if f:read("*l") == "HORZCFG=2" then
+            for line in f:lines() do
+                local key, value = string.match(line, "^([^=]+)=(.*)$")
+                if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
+                    attitudeMode = (value == "VECTOR") and 2 or 1
+                elseif key == "INVERT" then
+                    local p, r, h = string.match(value, "^(%d),(%d),(%d)$")
+                    if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
+                        invPitch, invRoll, invHdg = tonumber(p), tonumber(r), tonumber(h)
+                    end
+                elseif key == "GROUND" and tonumber(value) and tonumber(value) >= 0 and tonumber(value) <= 2 then
+                    groundMode = tonumber(value)
+                elseif key == "SOURCES" then
+                    local p, r = string.match(value, "^([^,]+),([^,]+)$")
+                    if p and #p <= 8 and #r <= 8 then pitchSource, rollSource = p, r end
+                elseif key == "AXES" then
+                    local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
+                    if validAxis(fwd) and validAxis(side) and validAxis(down) and
+                        string.sub(fwd, 1, 1) ~= string.sub(side, 1, 1) and
+                        string.sub(fwd, 1, 1) ~= string.sub(down, 1, 1) and
+                        string.sub(side, 1, 1) ~= string.sub(down, 1, 1) then
+                        fwdAxis, sideAxis, downAxis = fwd, side, down
+                    end
+                elseif key == "SLOT" then
+                    local i, name, source, unit = string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
+                    i = tonumber(i)
+                    if i and i >= 1 and i <= 9 and #name <= 12 and #source <= 8 and #unit <= 4 then
+                        sName[i], sSrc[i], sUnit[i] = name, source, unit
+                    end
+                end
+            end
         end
         io.close(f)
-    else
-        invPitch, invRoll, invHdg, groundMode, mapPitch, mapRoll = 0, 0, 0, 0, 1, 2
     end
     configLoaded = true
 end
 
--- 2. ERWEITERTE SPEICHER-ROUTINE
 local function saveConfig()
-    local modelInfo = model.getInfo()
-    local modelName = string.gsub(modelInfo.name, "[ %c%p]", "_")
-    local configPath = "/LOGS/hz_" .. modelName .. ".txt"
+    local f = io.open(modelPath(), "w")
+    if not f then return end
+    io.write(f, "HORZCFG=2\n")
+    io.write(f, "MODE=" .. ((attitudeMode == 1) and "ANGLES" or "VECTOR") .. "\n")
+    io.write(f, "INVERT=" .. invPitch .. "," .. invRoll .. "," .. invHdg .. "\n")
+    io.write(f, "GROUND=" .. groundMode .. "\n")
+    io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
+    io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
+    for i = 1, 9 do
+        io.write(f, "SLOT=" .. i .. "|" .. sName[i] .. "|" .. sSrc[i] .. "|" .. sUnit[i] .. "\n")
+    end
+    io.close(f)
+end
 
-    local f = io.open(configPath, "w")
-    if f then
-        io.write(f, tostring(invPitch) .. "\n")
-        io.write(f, tostring(invRoll) .. "\n")
-        io.write(f, tostring(invHdg) .. "\n")
-        io.write(f, tostring(groundMode) .. "\n")
-        io.write(f, tostring(mapPitch) .. "\n")
-        io.write(f, tostring(mapRoll) .. "\n")
+local function changeChar(text, index, delta)
+    local char = string.sub(text, index, index)
+    local position = string.find(allowedChars, char, 1, true) or 1
+    position = math.max(1, math.min(#allowedChars, position + delta))
+    return string.sub(text, 1, index - 1) .. string.sub(allowedChars, position, position) ..
+        string.sub(text, index + 1)
+end
 
-        for i = 1, 9 do
-            io.write(f, padStr(sName[i], 4) .. "\n")
-            io.write(f, padStr(sSrc[i], 4) .. "\n")
-            io.write(f, padStr(sUnit[i], 3) .. "\n")
+local function slotIndex()
+    return (menuPage == 2) and selectedRow or (selectedRow + 6)
+end
+
+local function menuRows()
+    if menuPage == 1 then return 8 end
+    if menuPage == 2 then return 7 end
+    if menuPage == 3 then return 4 end
+    return 5
+end
+
+local function cycleCatalog(slot, delta)
+    local found = 1
+    for i = 1, #catalog do
+        if string.lower(catalog[i][1]) == string.lower(trim(sSrc[slot])) then found = i break end
+    end
+    found = math.max(1, math.min(#catalog, found + delta))
+    sSrc[slot] = catalog[found][1]
+    sUnit[slot] = catalog[found][4]
+end
+
+local function cycleAxis(which, delta)
+    local current = (which == 1) and fwdAxis or ((which == 2) and sideAxis or downAxis)
+    local sign = string.sub(current, 2, 2)
+    local axes = { "X", "Y", "Z" }
+    local at = string.find("XYZ", string.sub(current, 1, 1), 1, true) or 1
+    for _ = 1, 3 do
+        at = ((at - 1 + delta) % 3) + 1
+        local candidate = axes[at] .. sign
+        if (which ~= 1 or (candidate ~= sideAxis and candidate ~= downAxis)) and
+            (which ~= 2 or (candidate ~= fwdAxis and candidate ~= downAxis)) and
+            (which ~= 3 or (candidate ~= fwdAxis and candidate ~= sideAxis)) then
+            if which == 1 then fwdAxis = candidate
+            elseif which == 2 then sideAxis = candidate
+            else downAxis = candidate end
+            return
         end
-        io.close(f)
     end
 end
 
--- 3. INITIALISIERUNG
-local function init()
-    menuActive = false
-    menuPage = 1
-    selectedRow = 1
-    editField = 0
-    editCharIdx = 1
-    menuOpenTime = 0
-    configLoaded = false
-end
-
--- Hilfsliste der erlaubten Zeichen für den Namen-Editor
-local allowedChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789°/%:-"
-
-local function changeChar(str, idx, delta)
-    local curChar = string.sub(str, idx, idx)
-    local charPos = string.find(allowedChars, curChar, 1, true) or 1
-
-    charPos = charPos + delta
-    if charPos > #allowedChars then
-        charPos = 1
-    elseif charPos < 1 then
-        charPos = #allowedChars
-    end
-
-    local newChar = string.sub(allowedChars, charPos, charPos)
-    return string.sub(str, 1, idx - 1) .. newChar .. string.sub(str, idx + 1)
-end
-
--- TASTEN-ABFRAGE & MENÜ-LOGIK
 local function handleMenu(event)
-    local lockActive = (getTime() - menuOpenTime) < 50
-    if lockActive then return true end
-
-    -- 1. FALL: SENSOR-ZEICHEN EDITIEREN
+    if getTime() - menuOpenTime < 50 then return true end
+    local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT
+    local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT
     if editField > 0 then
-        local idx = (selectedRow <= 6) and selectedRow or (selectedRow - 6)
-        if menuPage == 3 then idx = idx + 6 end
-
-        local currentText = (editField == 1) and sSrc[idx] or sUnit[idx]
-        local maxLen = (editField == 1) and 4 or 3
-
-        if event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT then
-            currentText = changeChar(currentText, editCharIdx, -1)
-            if editField == 1 then sSrc[idx] = currentText else sUnit[idx] = currentText end
-        elseif event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT then
-            currentText = changeChar(currentText, editCharIdx, 1)
-            if editField == 1 then sSrc[idx] = currentText else sUnit[idx] = currentText end
+        local text, maxLen, target
+        if menuPage == 1 then
+            target = (selectedRow == 2) and "pitch" or "roll"
+            text = (target == "pitch") and pitchSource or rollSource
+            maxLen = 8
+        else
+            local slot = slotIndex()
+            target = (editField == 1) and "name" or ((editField == 2) and "source" or "unit")
+            text = (target == "name" and sName[slot]) or
+                (target == "source" and sSrc[slot]) or sUnit[slot]
+            maxLen = (target == "name") and 8 or ((target == "source") and 8 or 4)
+        end
+        if (negative or positive) and menuPage ~= 1 and editField == 2 and not (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT) then
+            cycleCatalog(slotIndex(), negative and -1 or 1)
+        elseif negative or positive then
+            local updated = changeChar(padStr(text, maxLen), editCharIdx, negative and -1 or 1)
+            if menuPage == 1 then
+                if target == "pitch" then pitchSource = trim(updated) else rollSource = trim(updated) end
+            elseif target == "name" then sName[slotIndex()] = trim(updated)
+            elseif target == "source" then sSrc[slotIndex()] = trim(updated)
+            else sUnit[slotIndex()] = trim(updated) end
+        elseif event == EVT_ENTER_LONG and menuPage ~= 1 and editField == 2 then
+            cycleCatalog(slotIndex(), 1)
         elseif event == EVT_ENTER_BREAK then
             editCharIdx = editCharIdx + 1
             if editCharIdx > maxLen then
                 editCharIdx = 1
                 editField = editField + 1
-                if editField > 2 then editField = 0 end
+                local final = (menuPage == 1) and 1 or 3
+                if editField > final then editField = 0; saveConfig() end
             end
+        elseif event == EVT_EXIT_BREAK then
+            editField = 0
         end
         return true
     end
 
-    -- 2. FALL: NAVIGIEREN / BLÄTTERN
-    local maxRows = (menuPage == 1) and 6 or ((menuPage == 4) and 4 or ((menuPage == 2) and 7 or 5))
-    if event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT then
-        selectedRow = selectedRow - 1
-        if selectedRow < 1 then selectedRow = maxRows end
-    elseif event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT then
-        selectedRow = selectedRow + 1
-        if selectedRow > maxRows then selectedRow = 1 end
+    if menuPage == 4 and selectedRow <= 3 and (negative or positive) then
+        cycleAxis(selectedRow, positive and 1 or -1)
+        saveConfig()
+    elseif negative or positive then
+        local delta = positive and 1 or -1
+        selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
     elseif event == EVT_PAGE_BREAK then
-        menuPage = menuPage + 1
-        if menuPage > 4 then menuPage = 1 end
+        menuPage = (menuPage % 4) + 1
         selectedRow = 1
+    elseif event == EVT_EXIT_BREAK then
+        saveConfig()
+        menuActive = false
     elseif event == EVT_ENTER_BREAK then
         if menuPage == 1 then
-            if selectedRow == 1 then
-                invPitch = (invPitch == 0) and 1 or 0
-            elseif selectedRow == 2 then
-                invRoll = (invRoll == 0) and 1 or 0
-            elseif selectedRow == 3 then
-                invHdg = (invHdg == 0) and 1 or 0
-            elseif selectedRow == 4 then
-                groundMode = groundMode + 1
-                if groundMode > 2 then groundMode = 0 end
-            elseif selectedRow == 5 then -- Zeile 5: Originales Speichern
-                saveConfig()
-                menuActive = false
-            elseif selectedRow == 6 then -- Zeile 6: [scroll] blättert weiter
-                menuPage = 2
-                selectedRow = 1
-            end
-        elseif menuPage == 2 or menuPage == 3 then
-            local maxSel = (menuPage == 2) and 6 or 3
-            if selectedRow <= maxSel then
-                editField = 1
-                editCharIdx = 1
-            else -- Zeile 7 (S.2) bzw. Zeile 5 (S.3): [scroll] blättert weiter
-                menuPage = menuPage + 1
-                if menuPage > 4 then menuPage = 1 end
-                selectedRow = 1
-            end
+            if selectedRow == 1 then attitudeMode = (attitudeMode == 1) and 2 or 1
+            elseif selectedRow == 2 or selectedRow == 3 then editField = 1; editCharIdx = 1
+            elseif selectedRow == 4 then invPitch = 1 - invPitch
+            elseif selectedRow == 5 then invRoll = 1 - invRoll
+            elseif selectedRow == 6 then invHdg = 1 - invHdg
+            elseif selectedRow == 7 then groundMode = (groundMode + 1) % 3
+            else menuPage = 2; selectedRow = 1 end
+        elseif menuPage == 2 then
+            if selectedRow <= 6 then editField = 1; editCharIdx = 1
+            else menuPage = 3; selectedRow = 1 end
+        elseif menuPage == 3 then
+            if selectedRow <= 3 then editField = 1; editCharIdx = 1
+            else menuPage = 4; selectedRow = 1 end
         elseif menuPage == 4 then
-            if selectedRow == 1 then
-                mapPitch = mapPitch + 1; if mapPitch > 3 then mapPitch = 1 end
-            elseif selectedRow == 2 then
-                mapRoll = mapRoll + 1; if mapRoll > 3 then mapRoll = 1 end
-            elseif selectedRow == 3 then -- Zeile 3: Originales Speichern
-                saveConfig()
-                menuActive = false
-            elseif selectedRow == 4 then -- Zeile 4: [scroll] blättert im Kreis zurück zu Seite 1
-                menuPage = 1
-                selectedRow = 1
-            end
+            if selectedRow <= 3 then
+                    local axis = (selectedRow == 1 and fwdAxis) or (selectedRow == 2 and sideAxis) or downAxis
+                    local value = string.sub(axis, 1, 1) .. ((string.sub(axis, 2, 2) == "+") and "-" or "+")
+                    if selectedRow == 1 then fwdAxis = value elseif selectedRow == 2 then sideAxis = value else downAxis = value end
+            elseif selectedRow == 4 then calibrationStep = 1
+            else menuPage = 1; selectedRow = 1 end
         end
+        saveConfig()
     end
     return true
 end
 
+local function vectorValues()
+    return { getValue("AccX") or 0, getValue("AccY") or 0, getValue("AccZ") or 0 }
+end
 
--- MENÜ-GRAFIK
-local function drawMenu()
-    local blink = (math.floor(getTime() / 30) % 2 == 0)
+local function axisValue(values, setting)
+    local index = string.sub(setting, 1, 1) == "X" and 1 or
+        (string.sub(setting, 1, 1) == "Y" and 2 or 3)
+    return values[index] * ((string.sub(setting, 2, 2) == "-") and -1 or 1)
+end
 
-    if menuPage == 1 then
-        lcd.drawText(1, 2, "-- CONFIG MENU (1/4) --", INVERS)
-        local groundText = "White"
-        if groundMode == 1 then
-            groundText = "Lines"
-        elseif groundMode == 2 then
-            groundText = "Points"
-        end
-
-        lcd.drawText(1, 13, (selectedRow == 1 and "> " or "  ") .. "Pitch Invert: " .. (invPitch == 1 and "YES" or "NO"),
-            selectedRow == 1 and INVERS or 0)
-        lcd.drawText(1, 22, (selectedRow == 2 and "> " or "  ") .. "Roll Invert : " .. (invRoll == 1 and "YES" or "NO"),
-            selectedRow == 2 and INVERS or 0)
-        lcd.drawText(1, 31, (selectedRow == 3 and "> " or "  ") .. "Hdg Invert  : " .. (invHdg == 1 and "YES" or "NO"),
-            selectedRow == 3 and INVERS or 0)
-        lcd.drawText(1, 40, (selectedRow == 4 and "> " or "  ") .. "Ground      : " .. groundText,
-            selectedRow == 4 and INVERS or 0)
-        lcd.drawText(1, 51, (selectedRow == 5 and "> " or "  ") .. "     >> SAVE <<", selectedRow == 5 and INVERS or 0)
-    elseif menuPage == 2 or menuPage == 3 then
-        local pTitle = (menuPage == 2) and "-- SENSORS LEFT (2/4) --" or "-- SENSORS RIGHT (3/4) --"
-        lcd.drawText(1, 2, pTitle, INVERS)
-
-        local startIdx = (menuPage == 2) and 1 or 7
-        local endIdx   = (menuPage == 2) and 6 or 9
-        local yPos     = 13
-
-        for i = startIdx, endIdx do
-            local rowIdx = (menuPage == 2) and i or (i - 6)
-            local isSel = (selectedRow == rowIdx)
-            local prefix = isSel and "> " or "  "
-
-            lcd.drawText(1, yPos, prefix .. sName[i] .. ":", 0)
-
-            local srcStr = sSrc[i]
-            local unitStr = sUnit[i]
-
-            if isSel and editField > 0 then
-                local txt = (editField == 1) and srcStr or unitStr
-                if blink then
-                    txt = string.sub(txt, 1, editCharIdx - 1) .. "_" .. string.sub(txt, editCharIdx + 1)
-                end
-                if editField == 1 then srcStr = txt else unitStr = txt end
-            end
-
-            lcd.drawText(60, yPos, trim(srcStr), (isSel and editField == 1) and INVERS or 0)
-            lcd.drawText(102, yPos, "[" .. trim(unitStr) .. "]", (isSel and editField == 2) and INVERS or 0, RIGHT)
-            yPos = yPos + 8
-        end
-    elseif menuPage == 4 then
-        lcd.drawText(1, 2, "-- AXIS MAPPING (4/4) --", INVERS)
-        local axNames = { "AccX", "AccY", "AccZ" }
-        lcd.drawText(1, 15, (selectedRow == 1 and "> " or "  ") .. "Map Pitch -> " .. axNames[mapPitch],
-            selectedRow == 1 and INVERS or 0)
-        lcd.drawText(1, 27, (selectedRow == 2 and "> " or "  ") .. "Map Roll  -> " .. axNames[mapRoll],
-            selectedRow == 2 and INVERS or 0)
-        lcd.drawText(1, 48, (selectedRow == 3 and "> " or "  ") .. "     >> SAVE <<", selectedRow == 3 and INVERS or 0)
-    end -- Hier endet die Seiten-Unterscheidung!
-
-    -- ============================================================================
-    -- PAGE-WECHSEL (JETZT HIER GANZ UNTEN FÜR ALLE SEITEN)
-    -- ============================================================================
-    local maxRows = (menuPage == 1) and 6 or ((menuPage == 4) and 4 or ((menuPage == 2) and 7 or 5))
-    if selectedRow == maxRows then
-        lcd.drawRectangle(82, 55, 44, 9, FORCE)
-        lcd.drawText(104, 56, "[scroll]", INVERS + CENTER)
+local function calibrate(event)
+    local values = vectorValues()
+    if calibrationStep == 1 then
+        local index = 1
+        if math.abs(values[2]) > math.abs(values[index]) then index = 2 end
+        if math.abs(values[3]) > math.abs(values[index]) then index = 3 end
+        local axis = ({ "X", "Y", "Z" })[index]
+        downAxis = axis .. ((values[index] >= 0) and "+" or "-")
+        calibrationLevel = { values = values, down = index }
+        calibrationStep = 2
+    elseif calibrationStep == 2 and (event == EVT_ENTER_BREAK) then
+        local remain = {}
+        for i = 1, 3 do if i ~= calibrationLevel.down then remain[#remain + 1] = i end end
+        local forward = (math.abs(values[remain[1]]) >= math.abs(values[remain[2]])) and remain[1] or remain[2]
+        local other = (forward == remain[1]) and remain[2] or remain[1]
+        fwdAxis = ({ "X", "Y", "Z" })[forward] .. ((values[forward] >= 0) and "+" or "-")
+        local fSign = string.sub(fwdAxis, 2, 2) == "+" and 1 or -1
+        local dSign = string.sub(downAxis, 2, 2) == "+" and 1 or -1
+        local fVec = { 0, 0, 0 }; fVec[forward] = fSign
+        local sideVector = { 0, 0, 0 }
+        sideVector[other] = 1
+        local cross = {
+            fVec[2] * sideVector[3] - fVec[3] * sideVector[2],
+            fVec[3] * sideVector[1] - fVec[1] * sideVector[3],
+            fVec[1] * sideVector[2] - fVec[2] * sideVector[1]
+        }
+        local sideSign = (cross[other] * dSign >= 0) and 1 or -1
+        sideAxis = ({ "X", "Y", "Z" })[other] .. ((sideSign > 0) and "+" or "-")
+        calibrationStep = 0
+        calibrationLevel = nil
+        saveConfig()
     end
-end -- end der drawMenu() Funktion
+end
 
--- ============================================================================
--- HAUPTFUNKTION (FLUGMODUS & HAUPTSCHLEIFE)
--- ============================================================================
+local function drawMenu(event)
+    lcd.drawText(1, 1, "-- CONFIG " .. menuPage .. "/4 --", INVERS)
+    if calibrationStep > 0 then
+        lcd.drawText(1, 15, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten, ENTER", 0)
+        lcd.drawText(1, 29, "ENTER: messen / EXIT: Ende", 0)
+        if event == EVT_EXIT_BREAK then calibrationStep = 0 end
+        return
+    end
+    local rows
+    if menuPage == 1 then
+        rows = {
+            "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR"),
+            "Pitch src: " .. pitchSource, "Roll src: " .. rollSource,
+            "Pitch inv: " .. (invPitch == 1 and "YES" or "NO"),
+            "Roll inv : " .. (invRoll == 1 and "YES" or "NO"),
+            "Hdg inv  : " .. (invHdg == 1 and "YES" or "NO"),
+            "Ground   : " .. ({ "White", "Lines", "Points" })[groundMode + 1],
+            "[scroll]"
+        }
+    elseif menuPage == 2 or menuPage == 3 then
+        rows = {}
+        local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
+        for i = first, last do
+            rows[#rows + 1] = padStr(sName[i], 4) .. " " .. padStr(sSrc[i], 4) .. " [" .. sUnit[i] .. "]"
+        end
+        rows[#rows + 1] = "[scroll]"
+    else
+        rows = { "Fwd : " .. fwdAxis, "Side: " .. sideAxis, "Down: " .. downAxis,
+            "Calibrate", "[scroll]" }
+    end
+    local y = 10
+    for i = 1, #rows do
+        local prefix = (i == selectedRow) and "> " or "  "
+        local text = prefix .. rows[i]
+        if editField > 0 and i == selectedRow then
+            local value = (menuPage == 1) and ((selectedRow == 2) and pitchSource or rollSource) or
+                ((editField == 1 and sName[slotIndex()]) or (editField == 2 and sSrc[slotIndex()]) or sUnit[slotIndex()])
+            local cursor = string.sub(value, 1, editCharIdx - 1) .. "_" .. string.sub(value, editCharIdx + 1)
+            text = prefix .. cursor
+        end
+        lcd.drawText(1, y, text, (i == selectedRow) and INVERS or 0)
+        y = y + 7
+    end
+end
+
+local function init()
+    menuActive, menuPage, selectedRow = false, 1, 1
+    editField, editCharIdx, menuOpenTime = 0, 1, 0
+    configLoaded = false
+end
+
+local function readSlot(source)
+    local raw = getValue(source)
+    if type(raw) == "table" then
+        local total = 0
+        for _, value in ipairs(raw) do total = total + (tonumber(value) or 0) end
+        raw = total
+    end
+    local value = tonumber(raw) or 0
+    local fmt, scale = "%.1f", 1
+    for i = 1, #catalog do
+        if string.lower(catalog[i][1]) == string.lower(source) then
+            fmt, scale = catalog[i][2], catalog[i][3]
+            break
+        end
+    end
+    return value * scale, fmt
+end
+
+local function getAttitude()
+    local pitch, roll
+    if attitudeMode == 1 then
+        pitch = tonumber(getValue(pitchSource)) or 0
+        roll = tonumber(getValue(rollSource)) or 0
+    else
+        local values = vectorValues()
+        local fwd, side, down = axisValue(values, fwdAxis), axisValue(values, sideAxis), axisValue(values, downAxis)
+        local magnitude = math.sqrt(fwd * fwd + side * side + down * down)
+        if magnitude > 0.001 then fwd, side, down = fwd / magnitude, side / magnitude, down / magnitude
+        else fwd, side, down = 0, 0, 1 end
+        pitch = math.atan2(-fwd, math.sqrt(side * side + down * down)) * 57.2957795
+        roll = math.atan2(side, down) * 57.2957795
+    end
+    pitch = pitch * ((invPitch == 1) and -1 or 1)
+    roll = roll * ((invRoll == 1) and -1 or 1)
+    return pitch, roll
+end
+
 local function run(event)
     lcd.clear()
-    if not configLoaded then
-        loadConfig()
-    end
+    if not configLoaded then loadConfig() end
     if event == EVT_MENU_LONG then
-        menuActive = true
-        menuPage = 1
-        selectedRow = 1
-        editField = 0
+        menuActive, menuPage, selectedRow, editField = true, 1, 1, 0
         menuOpenTime = getTime()
     end
     if menuActive then
-        handleMenu(event)
-        drawMenu()
+        if calibrationStep > 0 then
+            calibrate(event)
+            if event == EVT_EXIT_BREAK then calibrationStep = 0 end
+        else
+            handleMenu(event)
+        end
+        drawMenu(event)
         return 0
     end
-    -- ============================================================================
-    -- FLUGMODUS: SENSOR-AUSWERTUNG
-    -- ============================================================================
-    local pFact    = (invPitch == 1) and -1 or 1
-    local rFact    = (invRoll == 1) and -1 or 1
-    local hFact    = (invHdg == 1) and -1 or 1
-    local rssi     = getValue(trim(sSrc[1])) or 0
-    local sats     = getValue("Sats") or 0
-    local rawAlt   = getValue(trim(sSrc[2])) or 0
-    local rawGspd  = getValue(trim(sSrc[3])) or 0
-    local dist     = getValue(trim(sSrc[4])) or 0
-    local vspd     = getValue(trim(sSrc[5])) or 0
-    local rawHdg   = getValue(trim(sSrc[6])) or 0
-    local cels_raw = getValue(trim(sSrc[7])) or 0
-    local cmin     = getValue(trim(sSrc[8])) or 0
-    local curr     = getValue(trim(sSrc[9])) or 0
-    filteredAlt    = (rawAlt * 0.25) + (filteredAlt * 0.75)
-    local alt      = filteredAlt or 0
-    local gspd     = rawGspd * 1.852
-    local cels     = 0
-    if type(cels_raw) == "table" then
-        for _, cell_volt in ipairs(cels_raw) do cels = cels + cell_volt end
-    else
-        cels = tonumber(cels_raw) or 0
-    end
-    local accValues = { getValue("AccX") or 0, getValue("AccY") or 0, getValue("AccZ") or 0 }
-    local pitch     = accValues[mapPitch] * 90 * pFact
-    local roll      = accValues[mapRoll] * 90 * rFact
-    rawHdg          = rawHdg * hFact
-    if rawHdg < 0 then rawHdg = rawHdg + 360 end
-    local diff = rawHdg - filteredHdg
-    if diff > 180 then diff = diff - 360 end
-    if diff < -180 then diff = diff + 360 end
-    filteredHdg = filteredHdg + (diff * 0.3)
-    local hdg = (filteredHdg % 360 + 360) % 360
-    -- ============================================================================
-    -- GRAFIK-RENDERING (KÜNSTLICHER HORIZONT)
-    -- ============================================================================
+
+    local slots, slotFormats = {}, {}
+    for i = 1, 9 do slots[i], slotFormats[i] = readSlot(trim(sSrc[i])) end
+    filteredAlt = slots[2] * 0.25 + filteredAlt * 0.75
+    local pitch, roll = getAttitude()
+    local rawHdg = slots[6] * ((invHdg == 1) and -1 or 1)
+    rawHdg = (rawHdg % 360 + 360) % 360
+    local headingDiff = ((rawHdg - filteredHdg + 180) % 360) - 180
+    filteredHdg = (filteredHdg + headingDiff * 0.3) % 360
+    local hdg = math.floor(filteredHdg + 0.5) % 360
+
     local cx, sizeW, cy, sizeH = 76, 26, 35, 28
     local pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
-    local rollAngle = (roll / 57.2957)
-    local dx = math.cos(rollAngle) * (sizeW - 1)
-    local dy = math.sin(rollAngle) * (sizeW - 1)
-    local isUpsideDown = false
-    local absRoll = math.abs(roll % 360)
-    if absRoll > 90 and absRoll < 270 then isUpsideDown = true end
+    local rollAngle = roll * 0.01745329252
+    local dx, dy = math.cos(rollAngle) * (sizeW - 1), math.sin(rollAngle) * (sizeW - 1)
+    local isUpsideDown = math.abs(roll) > 90
     if groundMode > 0 then
-        local startX, endX = cx - sizeW + 1, cx + sizeW - 1
         for y = cy - sizeH + 1, cy + sizeH - 1 do
-            local xLeft, xRight = startX, endX
+            local left, right = cx - sizeW + 1, cx + sizeW - 1
             if dy ~= 0 then
-                local intersectX = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
-                if (dy > 0 and not isUpsideDown) or (dy < 0 and isUpsideDown) then
-                    xRight = math.min(endX, intersectX)
-                else
-                    xLeft = math.max(startX, intersectX)
-                end
-            else
-                if (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
-                    if y <= (cy + pitchOffset) then xLeft = endX + 1 end
-                else
-                    if y >= (cy + pitchOffset) then xLeft = endX + 1 end
-                end
-            end
-            if xLeft <= xRight then
-                if groundMode == 1 and y % 2 == 0 then
-                    lcd.drawLine(xLeft, y, xRight, y, SOLID, FORCE)
+                local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
+                if (dy > 0 and not isUpsideDown) or (dy < 0 and isUpsideDown) then right = math.min(right, cross)
+                else left = math.max(left, cross) end
+            elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
+                if y <= cy + pitchOffset then left = right + 1 end
+            elseif y >= cy + pitchOffset then left = right + 1 end
+            if left <= right then
+                if groundMode == 1 and y % 2 == 0 then lcd.drawLine(left, y, right, y, SOLID, FORCE)
                 elseif groundMode == 2 then
-                    local xLoopStart = xLeft + ((xLeft + y) % 2)
-                    for x = xLoopStart, xRight, 2 do lcd.drawPoint(x, y) end
+                    for x = left + ((left + y) % 2), right, 2 do lcd.drawPoint(x, y) end
                 end
             end
         end
@@ -378,118 +438,49 @@ local function run(event)
     lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
-    if alt and sizeH > 0 then
-        local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
-        if altTickY >= (cy - sizeH + 2) and altTickY <= (cy + sizeH - 2) then
-            lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
-        end
+    local alt = filteredAlt
+    local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
+    if altTickY >= cy - sizeH + 2 and altTickY <= cy + sizeH - 2 then
+        lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
     end
-    lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
-    local gfix = getValue("Gfix") or 0
-    local fixStr = (gfix == 3) and "3D" or ((gfix == 2) and "2D" or "nF")
-    lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fixStr, SMLSIZE + RIGHT)
+    lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", tonumber(getValue("Sats")) or 0), SMLSIZE)
+    local fix = tonumber(getValue("GFix")) or 0
+    lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
     lcd.drawText(cx, cy - 13, string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE + CENTER)
-    -- COMPASS SCALE & ARROW
-    if hdg and hdg >= 0 and hdg <= 360 then
-        local yBottom = cy - sizeH - 1                                       -- Oberer Rand der Box
-        -- Orientierungspfeil: Zeigt von unten nach oben, Spitze genau auf dem Boxrand (yBottom)
-        lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)             -- Vertikaler Stamm
-        lcd.drawLine(cx - 1, yBottom - 1, cx + 1, yBottom - 1, SOLID, FORCE) -- Breite Basis
-        lcd.drawPoint(cx, yBottom)                                           -- Spitze auf der Box
-        for i = -6, 6 do
-            local tickAngle = (math.floor(hdg / 5) + i) * 5
-            local normalizedAngle = (tickAngle % 360 + 360) % 360
-            local diffH = tickAngle - hdg
-            if diffH > 180 then diffH = diffH - 360 elseif diffH < -180 then diffH = diffH + 360 end
-            local tickX = cx + (diffH * 0.75)
-            if tickX >= (cx - sizeW) and tickX <= (cx + sizeW) and tickX >= 0 and tickX <= 128 then
-                -- Haupt- und Zwischenrichtungen (Teilbar durch 45)
-                if normalizedAngle % 45 == 0 then
-                    lcd.drawLine(tickX - 1, yBottom - 6, tickX + 1, yBottom - 6, SOLID, FORCE)
-                    lcd.drawLine(tickX, yBottom - 5, tickX, yBottom - 4, SOLID, FORCE)
-                    local letter = ""
-                    if normalizedAngle == 0 or normalizedAngle == 360 then
-                        letter = "N"
-                    elseif normalizedAngle == 45 then
-                        letter = "NO"
-                    elseif normalizedAngle == 90 then
-                        letter = "O"
-                    elseif normalizedAngle == 135 then
-                        letter = "SO"
-                    elseif normalizedAngle == 180 then
-                        letter = "S"
-                    elseif normalizedAngle == 225 then
-                        letter = "SW"
-                    elseif normalizedAngle == 270 then
-                        letter = "W"
-                    elseif normalizedAngle == 315 then
-                        letter = "NW"
-                    end
-                    -- Buchstaben vertikal um 3px nach oben versetzt (yBottom - 6)
-                    local xOffset = (#letter == 2) and -4 or -2
-                    lcd.drawText(tickX + xOffset, yBottom - 6, letter, SMLSIZE)
-                    -- Zwischenstufen (30°-Schritte)
-                elseif normalizedAngle % 15 == 0 then
-                    lcd.drawLine(tickX, yBottom - 4, tickX, yBottom, SOLID, FORCE)
-                else
-                    lcd.drawLine(tickX, yBottom - 2, tickX, yBottom, SOLID, FORCE)
-                end
+
+    local yBottom = cy - sizeH - 1
+    lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)
+    for i = -6, 6 do
+        local angle = (math.floor(hdg / 5) + i) * 5
+        local normalized = (angle % 360 + 360) % 360
+        local diff = ((angle - hdg + 180) % 360) - 180
+        local x = cx + diff * 0.75
+        if x >= cx - sizeW and x <= cx + sizeW then
+            lcd.drawLine(x, yBottom - 2, x, yBottom, SOLID, FORCE)
+            if normalized % 45 == 0 then
+                local labels = { [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
+                    [180] = "S", [225] = "SW", [270] = "W", [315] = "NW" }
+                lcd.drawText(x - ((#labels[normalized] == 2) and 4 or 2), yBottom - 6, labels[normalized], SMLSIZE)
             end
         end
     end
-    -- ============================================================================
-    -- LINKE SEITE (Blendet Zeile komplett aus, wenn der Name leer ist)
-    -- ============================================================================
-    if trim(sName[1]) ~= "" then
-        lcd.drawText(1, 2, trim(sName[1]) .. ":" .. string.format("%d", rssi) .. trim(sUnit[1]),
-            SMLSIZE)
-    end
-    if trim(sName[2]) ~= "" then
-        lcd.drawText(1, 13,
-            trim(sName[2]) .. ":" .. string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE)
-    end
-    if trim(sName[3]) ~= "" then
-        lcd.drawText(1, 24,
-            trim(sName[3]) .. ":" .. string.format("%.0f", gspd) .. trim(sUnit[3]), SMLSIZE)
-    end
-    if trim(sName[4]) ~= "" then
-        lcd.drawText(1, 35,
-            trim(sName[4]) .. ":" .. string.format("%.0f", dist) .. trim(sUnit[4]), SMLSIZE)
-    end
-    if trim(sName[5]) ~= "" then
-        lcd.drawText(1, 46,
-            trim(sName[5]) .. ":" .. string.format("%.0f", vspd) .. trim(sUnit[5]), SMLSIZE)
-    end
-    if trim(sName[6]) ~= "" then
-        lcd.drawText(1, 57,
-            trim(sName[6]) .. ":" .. string.format("%03d", hdg) .. trim(sUnit[6]), SMLSIZE)
-    end
 
-    -- ============================================================================
-    -- RECHTER TEXTBLOCK (Blendet Zeile komplett aus, wenn der Name leer ist)
-    -- ============================================================================
-    local rx = 104
-    local rEdge = 127
-
-    if trim(sName[7]) ~= "" then
-        lcd.drawText(rEdge + 1, 1, trim(sName[7]) .. ":", SMLSIZE + RIGHT)
-        lcd.drawText(rEdge, 9, string.format("%.1f", cels) .. trim(sUnit[7]), SMLSIZE + RIGHT)
+    for i = 1, 9 do
+        local name, unit = trim(sName[i]), trim(sUnit[i])
+        if name ~= "" then
+            local value = string.format(slotFormats[i], slots[i])
+            if i <= 6 then
+                lcd.drawText(1, 2 + (i - 1) * 11, name .. ":" .. value .. unit, SMLSIZE)
+            else
+                local row = i - 7
+                lcd.drawText(127, 1 + row * 17, name .. ":", SMLSIZE + RIGHT)
+                lcd.drawText(127, 9 + row * 17, value .. unit, SMLSIZE + RIGHT)
+            end
+        end
     end
-
-    if trim(sName[8]) ~= "" then
-        lcd.drawText(rEdge + 1, 19, trim(sName[8]) .. ":", SMLSIZE + RIGHT)
-        lcd.drawText(rEdge, 27, string.format("%.2f", cmin) .. trim(sUnit[8]), SMLSIZE + RIGHT)
-    end
-
-    if trim(sName[9]) ~= "" then
-        lcd.drawText(rEdge +1, 36, trim(sName[9]) .. ":", SMLSIZE + RIGHT)
-        lcd.drawText(rEdge, 43, string.format("%.1f", curr) .. trim(sUnit[9]), SMLSIZE + RIGHT)
-    end
-
-    -- Die Horizont-Werte (Pitch/Roll) bleiben immer sichtbar
-    lcd.drawText(rEdge - 1, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
-    lcd.drawText(rEdge, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
-
+    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "degY", SMLSIZE + RIGHT)
+    lcd.drawText(127, 58, string.format("%.0f", roll) .. "degX", SMLSIZE + RIGHT)
     return 0
 end
+
 return { init = init, run = run }
