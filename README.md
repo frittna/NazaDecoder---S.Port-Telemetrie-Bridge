@@ -41,6 +41,8 @@ Die Anzeige in der Horizontmitte lässt sich auf Menüseite 3 unter `Inside Hor.
 
 Neben der Satellitenzahl zeigt das Lua-Menü ein 10×10-Pixelsymbol: ohne GPS-Fix werden Symbol und Zahl ausgeblendet, ab Fix 1 blinkt die Satellitenbasis, bei 2D/3D-Fix kommen Signalstrahlen hinzu. Nach mehr als 10 Sekunden stabilem 3D-Fix blinkt das Symbol bei einem Einbruch auf Fix 2 oder darunter (länger als 3 Sekunden) eine Minute lang.
 
+Der Home-Pfeil wird beim ersten gültigen 3D-Fix nach Lua-Start aus der GPS-Position gesetzt und zeigt relativ zum `Hdg` zur Startposition. Die Richtung wird innerhalb der sichtbaren Kompassskala markiert, außerhalb weist ein Pfeil am linken oder rechten Rand in die passende Richtung. Unter 5 m Abstand wird er wegen GPS-Positionsrauschen ausgeblendet; nach einem Lua-Neustart wird Home neu gesetzt.
+
 Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
 ### Programmierung bei 328P

@@ -7,6 +7,7 @@ local insideSource, insideEnabled = "Alt", 1
 -- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
 local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
 local filteredAlt, filteredHdg = 0, 0
+local homeLat, homeLon
 local gpsFix3Since, gpsLowFixSince, gpsWarningSince = nil, nil, nil
 local menuActive, menuPage, selectedRow = false, 1, 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
@@ -651,6 +652,55 @@ local function drawSatellite(x, y, fix)
     if fix >= 3 then drawSatellitePoints(x, y, satelliteOuterRays) end
 end
 
+local function gpsCoordinates()
+    local gps = getValue("GPS")
+    if type(gps) ~= "table" then return nil, nil end
+    local lat, lon = gps.lat, gps.lon
+    if type(lat) ~= "number" or type(lon) ~= "number" or
+        lat ~= lat or lon ~= lon or math.abs(lat) > 90 or math.abs(lon) > 180 then
+        return nil, nil
+    end
+    return lat, lon
+end
+
+local function homeDirection(lat, lon)
+    if not homeLat or not lat or not lon then return nil, nil end
+    local toRadians = math.pi / 180
+    local lat1, lat2 = homeLat * toRadians, lat * toRadians
+    local deltaLat = (lat - homeLat) * toRadians
+    local deltaLon = (lon - homeLon) * toRadians
+    local sinLat, sinLon = math.sin(deltaLat / 2), math.sin(deltaLon / 2)
+    local a = sinLat * sinLat + math.cos(lat1) * math.cos(lat2) * sinLon * sinLon
+    a = math.max(0, math.min(1, a))
+    local distance = 12742000 * atan2(math.sqrt(a), math.sqrt(1 - a))
+    if distance <= 5 then return nil, distance end
+
+    local bearingY = math.sin(deltaLon) * math.cos(lat2)
+    local bearingX = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(deltaLon)
+    local bearing = (atan2(bearingY, bearingX) / toRadians) % 360
+    return bearing, distance
+end
+
+local function drawHomePointer(bearing, heading, cx, topY, sizeW)
+    local delta = ((bearing - heading + 180) % 360) - 180
+    local firstTick = math.floor(heading / 5) * 5 - 30 - heading
+    local lastTick = math.floor(heading / 5) * 5 + 30 - heading
+    if delta < firstTick then
+        local x = cx - sizeW + 1
+        lcd.drawLine(x + 4, topY + 1, x, topY + 4, SOLID, FORCE)
+        lcd.drawLine(x, topY + 4, x + 4, topY + 7, SOLID, FORCE)
+    elseif delta > lastTick then
+        local x = cx + sizeW - 1
+        lcd.drawLine(x - 4, topY + 1, x, topY + 4, SOLID, FORCE)
+        lcd.drawLine(x, topY + 4, x - 4, topY + 7, SOLID, FORCE)
+    else
+        local x = math.floor(cx + delta * 0.75 + 0.5)
+        lcd.drawLine(x - 3, topY + 3, x, topY - 1, SOLID, FORCE)
+        lcd.drawLine(x + 3, topY + 3, x, topY - 1, SOLID, FORCE)
+    end
+end
+
 local function getAttitude()
     local pitch, roll
     if attitudeMode == 1 then
@@ -703,6 +753,13 @@ local function run(event)
     local headingDiff = ((rawHdg - filteredHdg + 180) % 360) - 180
     filteredHdg = (filteredHdg + headingDiff * 0.3) % 360
     local hdg = math.floor(filteredHdg + 0.5) % 360
+    local fix = math.max(0, math.min(3, math.floor(tonumber(getValue("GFix")) or 0)))
+    local gpsLat, gpsLon = gpsCoordinates()
+    -- Home wird beim ersten gueltigen 3D-Fix nach Lua-Start gesetzt.
+    if fix == 3 and not homeLat and gpsLat and gpsLon then
+        homeLat, homeLon = gpsLat, gpsLon
+    end
+    local homeBearing = homeDirection(gpsLat, gpsLon)
 
     local cx, sizeW, cy, sizeH = 76, 26, 35, 28
     local pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
@@ -741,7 +798,6 @@ local function run(event)
         end
     end
     local now = getTime()
-    local fix = math.max(0, math.min(3, math.floor(tonumber(getValue("GFix")) or 0)))
     local warningActive = updateGPSWarning(fix, now)
     if fix > 0 then
         local blinkOn = math.floor(now / 100) % 2 == 0
@@ -777,6 +833,9 @@ local function run(event)
                     yBottom - 6, headingLabels[normalized], SMLSIZE)
             end
         end
+    end
+    if homeBearing and fix >= 2 then
+        drawHomePointer(homeBearing, hdg, cx, cy - sizeH, sizeW)
     end
 
     for i = 1, 9 do
