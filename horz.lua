@@ -39,7 +39,7 @@ local sName, sSrc, sUnit = {}, {}, {}
 
 local catalog = {
     { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
-    { "GSpd", "%.0f", 1.852, "kmh" }, { "Dist", "%.0f", 1, "m" },
+    { "GSpd", "%.0f", 1, "kmh" }, { "Dist", "%.0f", 1, "m" },
     { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "°" },
     { "Cels", "%.1f", 1, "V" }, { "celD", "%.2f", 1, "V" },
     { "VFAS", "%.1f", 1, "V" }, { "Curr", "%.1f", 1, "A" },
