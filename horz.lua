@@ -199,11 +199,22 @@ local function slotIndex()
     return (menuPage == 2) and selectedRow or (selectedRow + 6)
 end
 
-local function menuRows()
+local function menuContentRows()
     if menuPage == 1 then return 7 end
     if menuPage == 2 then return 6 end
     if menuPage == 3 then return 3 end
     return 4
+end
+
+local function menuRows()
+    return menuContentRows() + 1
+end
+
+local function nextMenuPage()
+    if axisEditing then saveConfig() end
+    menuPage = (menuPage % 4) + 1
+    selectedRow = 1
+    axisEditing = false
 end
 
 local function cycleCatalog(slot, delta)
@@ -295,16 +306,15 @@ local function handleMenu(event)
         local delta = positive and 1 or -1
         selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
     elseif event == EVT_PAGE_BREAK then
-        if axisEditing then saveConfig() end
-        menuPage = (menuPage % 4) + 1
-        selectedRow = 1
-        axisEditing = false
+        nextMenuPage()
     elseif event == EVT_EXIT_BREAK then
         saveConfig()
         menuActive = false
         axisEditing = false
     elseif event == EVT_ENTER_BREAK then
-        if menuPage == 1 then
+        if selectedRow > menuContentRows() then
+            nextMenuPage()
+        elseif menuPage == 1 then
             if selectedRow == 1 then attitudeMode = (attitudeMode == 1) and 2 or 1
             elseif selectedRow == 2 or selectedRow == 3 then editField = 1; editCharIdx = 1
             elseif selectedRow == 4 then invPitch = 1 - invPitch
@@ -503,9 +513,9 @@ local function drawMenu(event)
         else
             lcd.drawText(1, 44, "Manuell: +/- Achse, ENTER Vorzeichen", SMLSIZE)
         end
-        lcd.drawText(1, 52, "Calibrate: Level, dann Nase abwaerts", SMLSIZE)
     end
-    lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT)
+    lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT +
+        ((selectedRow > menuContentRows()) and INVERS or 0))
 end
 
 local function init()
