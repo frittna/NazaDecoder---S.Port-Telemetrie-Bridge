@@ -10,6 +10,8 @@ local menuActive, menuPage, selectedRow = false, 1, 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
 local calibrationStep, calibrationLevel = 0, nil
 local calibrationMessage = ""
+local axisMessage = ""
+local configSaveFailed = false
 local axisEditing = false
 local configLoaded = false
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
@@ -128,7 +130,10 @@ end
 
 local function saveConfig()
     local f = io.open(modelPath(), "w")
-    if not f then return end
+    if not f then
+        configSaveFailed = true
+        return false
+    end
     io.write(f, "HORZCFG=2\n")
     io.write(f, "MODE=" .. ((attitudeMode == 1) and "ANGLES" or "VECTOR") .. "\n")
     io.write(f, "INVERT=" .. invPitch .. "," .. invRoll .. "," .. invHdg .. "\n")
@@ -139,6 +144,8 @@ local function saveConfig()
         io.write(f, "SLOT=" .. i .. "|" .. sName[i] .. "|" .. sSrc[i] .. "|" .. sUnit[i] .. "\n")
     end
     io.close(f)
+    configSaveFailed = false
+    return true
 end
 
 local function changeChar(text, index, delta)
@@ -163,7 +170,10 @@ end
 local function cycleCatalog(slot, delta)
     local found = 1
     for i = 1, #catalog do
-        if string.lower(catalog[i][1]) == string.lower(trim(sSrc[slot])) then found = i break end
+        if string.lower(catalog[i][1]) == string.lower(trim(sSrc[slot])) then
+            found = i
+            break
+        end
     end
     found = math.max(1, math.min(#catalog, found + delta))
     sSrc[slot] = catalog[found][1]
@@ -186,6 +196,7 @@ local function cycleAxis(which, delta)
     end
     assignments[which] = candidateAxis .. sign
     fwdAxis, sideAxis, downAxis = assignments[1], assignments[2], assignments[3]
+    return owner ~= nil
 end
 
 local function handleMenu(event)
@@ -232,7 +243,11 @@ local function handleMenu(event)
     end
 
     if menuPage == 4 and axisEditing and selectedRow <= 3 and (negative or positive) then
-        cycleAxis(selectedRow, positive and 1 or -1)
+        if cycleAxis(selectedRow, positive and 1 or -1) then
+            axisMessage = "Achsen getauscht"
+        else
+            axisMessage = ""
+        end
     elseif negative or positive then
         local delta = positive and 1 or -1
         selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
@@ -273,6 +288,7 @@ local function handleMenu(event)
                     saveConfig()
                 else
                     axisEditing = true
+                    axisMessage = ""
                 end
             elseif selectedRow == 4 then
                 calibrationStep = 1
@@ -366,6 +382,9 @@ local function drawMenu(event)
         "-- SENSORS RIGHT (3/4) --", "-- AXIS MAPPING (4/4) --"
     }
     lcd.drawText(1, 1, titles[menuPage], SMLSIZE)
+    if configSaveFailed then
+        lcd.drawText(127, 1, "SAVE!", SMLSIZE + RIGHT + INVERS)
+    end
     if calibrationStep > 0 then
         local values = vectorValues()
         lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
@@ -432,6 +451,8 @@ local function drawMenu(event)
         end
         if calibrationMessage ~= "" then
             lcd.drawText(1, 44, calibrationMessage, SMLSIZE)
+        elseif axisMessage ~= "" then
+            lcd.drawText(1, 44, axisMessage, SMLSIZE)
         else
             lcd.drawText(1, 44, "Manuell: +/- Achse, ENTER Vorzeichen", SMLSIZE)
         end
@@ -445,6 +466,7 @@ local function init()
     editField, editCharIdx, menuOpenTime = 0, 1, 0
     axisEditing = false
     calibrationStep, calibrationLevel, calibrationMessage = 0, nil, ""
+    axisMessage, configSaveFailed = "", false
     configLoaded = false
 end
 
