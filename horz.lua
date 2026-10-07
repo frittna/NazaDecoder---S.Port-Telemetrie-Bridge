@@ -28,7 +28,7 @@ local atan2 = math.atan2 or function(y, x)
 end
 
 local defaults = {
-    names = { "RSSI", "Alt", "+/-", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
+    names = { "RX", "Alt", "+/-", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
     sources = { "RSSI", "Alt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
     units = { "dB", "m", "m/s", "kmh", "m", "°", "V", "V", "A" }
 }
@@ -72,7 +72,7 @@ end
 local function modelPath()
     local info = model.getInfo()
     local name = string.gsub((info and info.name) or "model", "[ %c%p]", "_")
-    return "/LOGS/hz_" .. name .. ".txt"
+    return "/LOGS/hz_" .. name .. ".cfg"
 end
 
 local function setDefaults()
