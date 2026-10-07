@@ -14,7 +14,7 @@ local axisMessage = ""
 local configSaveFailed = false
 local axisEditing = false
 local configLoaded = false
--- 338 Byte = 77 feste Bytes + 9 SLOT-Zeilen je 29 Byte (Name 12, Quelle 4, Einheit 3).
+-- V2: max. 338 Byte (77 fest + 9*29 je Slot); Leselimit 1024 laesst Reserve.
 local CONFIG_READ_LIMIT = 1024
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
@@ -224,7 +224,10 @@ local function handleMenu(event)
                 (target == "source" and sSrc[slot]) or sUnit[slot]
             maxLen = (target == "unit") and 3 or 4
         end
-        if (negative or positive) and menuPage ~= 1 and editField == 2 and not (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT) then
+        -- +/- waehlt Katalogsensoren; der Drehgeber bearbeitet die Quelle zeichenweise.
+        local isCatalogCycle = (negative or positive) and menuPage ~= 1 and editField == 2 and
+            not (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT)
+        if isCatalogCycle then
             cycleCatalog(slotIndex(), negative and -1 or 1)
         elseif negative or positive then
             local updated = changeChar(padStr(text, maxLen), editCharIdx, negative and -1 or 1)
