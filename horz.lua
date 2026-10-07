@@ -602,11 +602,15 @@ local function readSlot(source, unit)
 end
 
 local satelliteBase = {
-    { 0, 5 }, { 1, 4 }, { 2, 3 }, { 3, 2 }, { 4, 3 }, { 5, 4 }, { 6, 5 },
-    { 0, 4 }, { 1, 5 }, { 5, 3 }, { 6, 4 }
+    { 4, 0 }, { 5, 0 },
+    { 1, 1 }, { 2, 1 }, { 3, 1 }, { 5, 1 },
+    { 1, 2 }, { 4, 2 },
+    { 0, 3 }, { 2, 3 }, { 3, 3 }, { 4, 3 }, { 5, 3 }, { 7, 3 },
+    { 0, 4 }, { 1, 4 }, { 3, 4 }, { 4, 4 }, { 5, 4 }, { 7, 4 },
+    { 6, 5 }, { 5, 6 }, { 3, 7 }, { 4, 7 }
 }
-local satelliteInnerRays = { { 4, 1 }, { 5, 0 }, { 5, 2 } }
-local satelliteOuterRays = { { 6, 0 }, { 6, 1 }, { 6, 2 } }
+local satelliteInnerRays = { { 4, 9 }, { 5, 9 }, { 6, 8 }, { 7, 8 } }
+local satelliteOuterRays = { { 7, 7 }, { 8, 6 }, { 9, 5 }, { 9, 4 } }
 
 local function updateGPSWarning(fix, now)
     if gpsWarningSince and now - gpsWarningSince >= 6000 then
@@ -737,11 +741,12 @@ local function run(event)
     local warningActive = updateGPSWarning(fix, now)
     if fix > 0 then
         local blinkOn = math.floor(now / 100) % 2 == 0
+        local satsX = cx - sizeW - 7
         if (fix ~= 1 or blinkOn) and (not warningActive or blinkOn) then
-            drawSatellite(cx - sizeW - 14, cy - sizeH + 1, fix)
+            drawSatellite(satsX - 10, cy - sizeH + 1, fix)
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
     end
     lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
     if insideEnabled == 1 then
