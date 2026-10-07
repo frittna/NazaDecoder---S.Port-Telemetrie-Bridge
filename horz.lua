@@ -510,12 +510,12 @@ local function drawMenu(event)
             lcd.drawText(1, 44, calibrationMessage, SMLSIZE)
         elseif axisMessage ~= "" then
             lcd.drawText(1, 44, axisMessage, SMLSIZE)
-        else
-            lcd.drawText(1, 44, "Manuell: +/- Achse, ENTER Vorzeichen", SMLSIZE)
         end
     end
+    local scrollSelected = selectedRow > menuContentRows()
+    lcd.drawText(1, 56, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
     lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT +
-        ((selectedRow > menuContentRows()) and INVERS or 0))
+        (scrollSelected and INVERS or 0))
 end
 
 local function init()
