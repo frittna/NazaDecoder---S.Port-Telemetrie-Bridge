@@ -115,19 +115,23 @@ local function loadConfig()
                         end
                     elseif key == "SOURCES" then
                         local p, r = string.match(value, "^(.-),(.-)$")
-                        if p and validText(p, 4) and validText(r, 4) then pitchSource, rollSource = p, r end
+                        if p ~= nil and r ~= nil and validText(p, 4) and validText(r, 4) then
+                            pitchSource, rollSource = p, r
+                        end
                     elseif key == "AXES" then
                         local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
-                        if validAxis(fwd) and validAxis(side) and validAxis(down) and
+                        if fwd and side and down and validAxis(fwd) and validAxis(side) and validAxis(down) and
                             string.sub(fwd, 1, 1) ~= string.sub(side, 1, 1) and
                             string.sub(fwd, 1, 1) ~= string.sub(down, 1, 1) and
                             string.sub(side, 1, 1) ~= string.sub(down, 1, 1) then
                             fwdAxis, sideAxis, downAxis = fwd, side, down
                         end
                     elseif key == "SLOT" then
-                        local i, name, source, unit = string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
-                        i = tonumber(i)
-                        if i and i >= 1 and i <= 9 and validText(name, SLOT_NAME_MAX) and
+                        local iText, name, source, unit =
+                            string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
+                        local i = tonumber(iText)
+                        if iText and name and source and unit and i and i % 1 == 0 and
+                            i >= 1 and i <= 9 and validText(name, SLOT_NAME_MAX) and
                             validText(source, 4) and validText(unit, 3) then
                             sName[i], sSrc[i], sUnit[i] = name, source, unit
                         end
@@ -229,8 +233,8 @@ local function handleMenu(event)
             maxLen = (target == "name") and SLOT_NAME_MAX or ((target == "unit") and 3 or 4)
         end
         -- Bei Slot-Quellen waehlt +/- Katalogsensoren; der Drehgeber editiert Zeichen.
-        local isCatalogCycle = (negative or positive) and menuPage ~= 1 and editField == 2 and
-            not (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT)
+        local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT
+        local isCatalogCycle = (negative or positive) and menuPage ~= 1 and editField == 2 and not isRotary
         if isCatalogCycle then
             cycleCatalog(slotIndex(), negative and -1 or 1)
         elseif negative or positive then
@@ -591,7 +595,7 @@ local function run(event)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     local alt = filteredAlt
-    if trim(sSrc[2]) == "Alt" then
+    if string.lower(trim(sSrc[2])) == "alt" then
         local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
         if altTickY >= cy - sizeH + 2 and altTickY <= cy + sizeH - 2 then
             lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
