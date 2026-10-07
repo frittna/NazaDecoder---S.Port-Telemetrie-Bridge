@@ -794,8 +794,13 @@ local function run(event)
     local alt = filteredAlt
     if string.lower(trim(sSrc[2])) == "alt" then
         local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
-        if altTickY >= cy - sizeH + 2 and altTickY <= cy + sizeH - 2 then
-            lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
+        local tickStep = sizeH / 2
+        for tick = -4, 4 do
+            local y = math.floor(altTickY + tick * tickStep + 0.5)
+            if y >= cy - sizeH + 2 and y <= cy + sizeH - 2 then
+                local length = (tick % 2 == 0) and 5 or 3
+                lcd.drawLine(cx - sizeW + 1, y, cx - sizeW + 1 + length, y, SOLID, FORCE)
+            end
         end
     end
     local now = getTime()
