@@ -14,7 +14,15 @@ local axisMessage = ""
 local configSaveFailed = false
 local axisEditing = false
 local configLoaded = false
-local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+-- Maximal 338 Byte fuer Format v2; der Puffer laesst Reserve fuer kuenftige Felder.
+local CONFIG_READ_LIMIT = 1024
+local atan2 = math.atan2 or function(y, x)
+    if x > 0 then return math.atan(y / x) end
+    if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
+    if y > 0 then return math.pi / 2 end
+    if y < 0 then return -math.pi / 2 end
+    return 0
+end
 
 local defaults = {
     names = { "RSSI", "Alt", "+/-", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
@@ -82,7 +90,7 @@ local function loadConfig()
     setDefaults()
     local f = io.open(modelPath(), "r")
     if f then
-        local contents = io.read(f, 1024)
+        local contents = io.read(f, CONFIG_READ_LIMIT)
         io.close(f)
         if contents then
             local firstLine = true
@@ -103,7 +111,7 @@ local function loadConfig()
                         tonumber(value) >= 0 and tonumber(value) <= 2 then
                         groundMode = tonumber(value)
                     elseif key == "SOURCES" then
-                        local p, r = string.match(value, "^([^,]+),([^,]+)$")
+                        local p, r = string.match(value, "^(.-),(.-)$")
                         if p and validText(p, 4) and validText(r, 4) then pitchSource, rollSource = p, r end
                     elseif key == "AXES" then
                         local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
@@ -252,6 +260,7 @@ local function handleMenu(event)
         local delta = positive and 1 or -1
         selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
     elseif event == EVT_PAGE_BREAK then
+        if axisEditing then saveConfig() end
         menuPage = (menuPage % 4) + 1
         selectedRow = 1
         axisEditing = false
@@ -383,7 +392,7 @@ local function drawMenu(event)
     }
     lcd.drawText(1, 1, titles[menuPage], SMLSIZE)
     if configSaveFailed then
-        lcd.drawText(127, 1, "SAVE!", SMLSIZE + RIGHT + INVERS)
+        lcd.drawText(127, 1, "ERR", SMLSIZE + RIGHT + INVERS)
     end
     if calibrationStep > 0 then
         local values = vectorValues()
@@ -616,6 +625,7 @@ local function run(event)
     end
     lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
     lcd.drawText(128, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
+    if configSaveFailed then lcd.drawText(52, 0, "SAVE ERR", SMLSIZE + INVERS) end
     return 0
 end
 
