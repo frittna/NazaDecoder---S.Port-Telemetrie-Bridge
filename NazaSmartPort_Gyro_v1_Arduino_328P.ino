@@ -14,7 +14,7 @@
 #include <NazaDecoder.h>
 
 // Montageanpassung: Index 0/1/2 = gX/gY/gZ; Vorzeichen nach Bedarf ändern.
-// SPORT-Z folgt dem gefussten Schwerkraftvektor: bei Modell-Level etwa -1 g.
+// SPORT-Z folgt dem fusionierten Schwerkraftvektor: bei Modell-Level etwa -1 g.
 #define SPORT_X_SOURCE 0
 #define SPORT_X_SIGN 1
 #define SPORT_Y_SOURCE 1
@@ -32,10 +32,16 @@
 #define USE_TESTDATA 0
 #define SERIAL_MONITOR 0
 
+// Diese SmartPort-IDs bilden die von horz.lua gelesenen AccX/AccY/AccZ-Sensoren.
+static const uint8_t ACC_SENSOR_ID = 0x1B;
+static const uint16_t ACC_X_DATA_ID = 0x0700;
+static const uint16_t ACC_Y_DATA_ID = 0x0710;
+static const uint16_t ACC_Z_DATA_ID = 0x0720;
+
 class FrSkySportSensorAccCustom : public FrSkySportSensor {
 public:
   FrSkySportSensorAccCustom()
-    : FrSkySportSensor((FrSkySportSensor::SensorId)0x1B),
+    : FrSkySportSensor((FrSkySportSensor::SensorId)ACC_SENSOR_ID),
       accXData(0), accYData(0), accZData(0), sendStage(0) {}
 
   void setData(float accX, float accY, float accZ) {
@@ -49,17 +55,17 @@ public:
     if (id != sensorId) return 0;
     switch (sendStage) {
       case 0:
-        serial.sendData(0x0700, accXData);
+        serial.sendData(ACC_X_DATA_ID, accXData);
         sendStage = 1;
-        return 0x0700;
+        return ACC_X_DATA_ID;
       case 1:
-        serial.sendData(0x0710, accYData);
+        serial.sendData(ACC_Y_DATA_ID, accYData);
         sendStage = 2;
-        return 0x0710;
+        return ACC_Y_DATA_ID;
       default:
-        serial.sendData(0x0720, accZData);
+        serial.sendData(ACC_Z_DATA_ID, accZData);
         sendStage = 0;
-        return 0x0720;
+        return ACC_Z_DATA_ID;
     }
   }
 

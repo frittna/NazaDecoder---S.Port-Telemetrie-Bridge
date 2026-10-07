@@ -16,6 +16,7 @@ local axisEditing = false
 local configLoaded = false
 -- V2: max. 338 Byte (77 fest + 9*29 je Slot); Leselimit 1024 laesst Reserve.
 local CONFIG_READ_LIMIT = 1024
+local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
     if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
@@ -126,7 +127,7 @@ local function loadConfig()
                     elseif key == "SLOT" then
                         local i, name, source, unit = string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
                         i = tonumber(i)
-                        if i and i >= 1 and i <= 9 and validText(name, 12) and
+                        if i and i >= 1 and i <= 9 and validText(name, SLOT_NAME_MAX) and
                             validText(source, 4) and validText(unit, 3) then
                             sName[i], sSrc[i], sUnit[i] = name, source, unit
                         end
@@ -151,7 +152,8 @@ local function saveConfig()
     io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
     for i = 1, 9 do
-        io.write(f, "SLOT=" .. i .. "|" .. sName[i] .. "|" .. sSrc[i] .. "|" .. sUnit[i] .. "\n")
+        io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
+            trim(sSrc[i]) .. "|" .. trim(sUnit[i]) .. "\n")
     end
     io.close(f)
     configSaveFailed = false
@@ -224,9 +226,9 @@ local function handleMenu(event)
             target = (editField == 1) and "name" or ((editField == 2) and "source" or "unit")
             text = (target == "name" and sName[slot]) or
                 (target == "source" and sSrc[slot]) or sUnit[slot]
-            maxLen = (target == "unit") and 3 or 4
+            maxLen = (target == "name") and SLOT_NAME_MAX or ((target == "unit") and 3 or 4)
         end
-        -- +/- waehlt Katalogsensoren; der Drehgeber bearbeitet die Quelle zeichenweise.
+        -- Bei Slot-Quellen waehlt +/- Katalogsensoren; der Drehgeber editiert Zeichen.
         local isCatalogCycle = (negative or positive) and menuPage ~= 1 and editField == 2 and
             not (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT)
         if isCatalogCycle then
@@ -380,11 +382,12 @@ local function calibrate(event)
     end
 end
 
-local function editDisplay(value, length)
+local function editDisplay(value, length, selectedIndex)
     local padded = padStr(value, length)
-    return string.sub(padded, 1, editCharIdx - 1) .. "[" ..
-        string.sub(padded, editCharIdx, editCharIdx) .. "]" ..
-        string.sub(padded, editCharIdx + 1)
+    local index = selectedIndex or editCharIdx
+    return string.sub(padded, 1, index - 1) .. "[" ..
+        string.sub(padded, index, index) .. "]" ..
+        string.sub(padded, index + 1)
 end
 
 local function drawMenu(event)
@@ -434,18 +437,23 @@ local function drawMenu(event)
             local selected = row == selectedRow
             local prefix = selected and ">" or " "
             lcd.drawText(1, y, prefix, selected and INVERS or 0)
-            local name = string.sub(trim(sName[i]), 1, 4)
+            local fullName = padStr(trim(sName[i]), SLOT_NAME_MAX)
+            local name = string.sub(fullName, 1, SLOT_NAME_VISIBLE)
             local source = trim(sSrc[i])
             local unit = trim(sUnit[i])
             local nameText, sourceText, unitText = name, source, unit
             if selected and editField > 0 then
-                if editField == 1 then nameText = editDisplay(name, 4)
+                if editField == 1 then
+                    local start = math.max(1, math.min(editCharIdx - SLOT_NAME_VISIBLE + 1,
+                        SLOT_NAME_MAX - SLOT_NAME_VISIBLE + 1))
+                    local visible = string.sub(fullName, start, start + SLOT_NAME_VISIBLE - 1)
+                    nameText = editDisplay(visible, SLOT_NAME_VISIBLE, editCharIdx - start + 1)
                 elseif editField == 2 then sourceText = editDisplay(source, 4)
                 else unitText = editDisplay(unit, 3) end
             end
             lcd.drawText(9, y, nameText, (selected and editField == 1) and INVERS or 0)
-            lcd.drawText(29, y, ":", 0)
-            lcd.drawText(35, y, sourceText, (selected and editField == 2) and INVERS or 0)
+            lcd.drawText(35, y, ":", 0)
+            lcd.drawText(41, y, sourceText, (selected and editField == 2) and INVERS or 0)
             lcd.drawText(72, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
         end
     else
