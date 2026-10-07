@@ -47,7 +47,7 @@ local catalog = {
     { "AccY", "%.2f", 1, "g" }, { "AccZ", "%.2f", 1, "g" },
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
     { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" },
-    { "celD", "%.2f", 1, "V" }
+    { "celD", "%.2f", 1, "V" }, { "GAlt", "%.1f", 1, "m" }
 }
 local catalogByName = {}
 for i = 1, #catalog do
