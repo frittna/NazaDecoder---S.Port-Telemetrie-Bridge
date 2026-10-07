@@ -94,9 +94,10 @@ static float gyroBiasY = 0.0f;
 static float gyroBiasSumX = 0.0f;
 static float gyroBiasSumY = 0.0f;
 static uint16_t gyroBiasSamples = 0;
+// Nach 25 s Aufwärmen folgen 25 Messungen (ca. 1 s) zur Gyro-Offsetbestimmung.
+static const uint16_t GYRO_BIAS_SAMPLE_COUNT = 25;
 static const uint32_t LED_PULSE_DURATION = 50UL;
 static const uint32_t WARMUP_LED_DURATION = 1500UL;
-static bool gyroWarmedUp = false;
 static bool gyroBiasReady = false;
 static bool angleInitialized = false;
 static float anglePitch = 0.0f;
@@ -195,7 +196,8 @@ void loop() {
     warmupCompleteLedStart = 0;
   }
 
-  if (now - lastUpdate >= MPU_UPDATE_INTERVAL) {
+  if (now - lastUpdate >= MPU_UPDATE_INTERVAL &&
+      (uint32_t)(now - systemStartTime) >= GYRO_WARMUP_TIME) {
     lastUpdate = now;
     Wire.beginTransmission(MPU_ADDR);
     Wire.write(0x3B);
@@ -222,15 +224,14 @@ void loop() {
       lastFilterTime = filterNow;
 
       if (!gyroBiasReady) {
-        if ((uint32_t)(filterNow - systemStartTime) < GYRO_WARMUP_TIME) {
-          gyroBiasSumX += (float)gyroRawX;
-          gyroBiasSumY += (float)gyroRawY;
-          if (gyroBiasSamples < 65535U) gyroBiasSamples++;
-        } else if (gyroBiasSamples > 0) {
+        // Das Modell während dieser Offsetmessung unbedingt ruhig halten.
+        gyroBiasSumX += (float)gyroRawX;
+        gyroBiasSumY += (float)gyroRawY;
+        gyroBiasSamples++;
+        if (gyroBiasSamples >= GYRO_BIAS_SAMPLE_COUNT) {
           gyroBiasX = gyroBiasSumX / gyroBiasSamples;
           gyroBiasY = gyroBiasSumY / gyroBiasSamples;
           gyroBiasReady = true;
-          gyroWarmedUp = true;
           warmupCompleteLedStart = filterNow;
           digitalWrite(LED_BUILTIN, HIGH);
         }
@@ -241,7 +242,7 @@ void loop() {
         angleRoll = accRoll;
         angleInitialized = true;
       } else if (!gyroBiasReady) {
-        // Während des stillen Warm-ups nur Acc-Winkel nutzen, keinen ungeeichten Gyro integrieren.
+        // Während der Bias-Messung nur Acc-Winkel nutzen, keinen ungeeichten Gyro integrieren.
         anglePitch = accPitch;
         angleRoll = accRoll;
       } else {

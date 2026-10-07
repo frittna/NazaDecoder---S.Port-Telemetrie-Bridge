@@ -474,7 +474,7 @@ local function drawMenu(event)
             local y = 10 + (row - 1) * 8
             local selected = row == selectedRow
             local prefix = selected and ">" or " "
-            lcd.drawText(1, y, prefix, selected and INVERS or 0)
+            lcd.drawText(1, y, prefix, 0)
             local fullName = padStr(trim(sName[i]), SLOT_NAME_MAX)
             local name = string.sub(fullName, 1, SLOT_NAME_VISIBLE)
             local source = trim(sSrc[i])
