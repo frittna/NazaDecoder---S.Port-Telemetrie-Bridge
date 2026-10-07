@@ -47,6 +47,15 @@ local catalog = {
     { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" },
     { "celD", "%.2f", 1, "V" }
 }
+local catalogByName = {}
+for i = 1, #catalog do
+    catalogByName[string.lower(catalog[i][1])] = catalog[i]
+end
+local slotValues, slotFormats = {}, {}
+local headingLabels = {
+    [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
+    [180] = "S", [225] = "SW", [270] = "W", [315] = "NW"
+}
 local allowedChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-+_.:*()&$"
 
 local function trim(str)
@@ -91,6 +100,7 @@ end
 
 local function loadConfig()
     setDefaults()
+    configLoadWarning = false
     local f = io.open(modelPath(), "r")
     if f then
         local contents = io.read(f, CONFIG_READ_LIMIT)
@@ -510,11 +520,9 @@ local function readSlot(source, unit)
     end
     local value = tonumber(raw) or 0
     local fmt, scale = "%.1f", 1
-    for i = 1, #catalog do
-        if string.lower(catalog[i][1]) == string.lower(source) then
-            fmt, scale = catalog[i][2], catalog[i][3]
-            break
-        end
+    local entry = catalogByName[string.lower(source)]
+    if entry then
+        fmt, scale = entry[2], entry[3]
     end
     if string.lower(source) == "gspd" and trim(unit) ~= "kmh" then scale = 1 end
     return value * scale, fmt
@@ -564,9 +572,8 @@ local function run(event)
         return 0
     end
 
-    local slots, slotFormats = {}, {}
-    for i = 1, 9 do slots[i], slotFormats[i] = readSlot(trim(sSrc[i]), sUnit[i]) end
-    filteredAlt = slots[2] * 0.25 + filteredAlt * 0.75
+    for i = 1, 9 do slotValues[i], slotFormats[i] = readSlot(trim(sSrc[i]), sUnit[i]) end
+    filteredAlt = slotValues[2] * 0.25 + filteredAlt * 0.75
     local pitch, roll = getAttitude()
     local rawHdg = (tonumber(getValue("Hdg")) or 0) * ((invHdg == 1) and -1 or 1)
     rawHdg = (rawHdg % 360 + 360) % 360
@@ -626,9 +633,8 @@ local function run(event)
         if x >= cx - sizeW and x <= cx + sizeW then
             lcd.drawLine(x, yBottom - 2, x, yBottom, SOLID, FORCE)
             if normalized % 45 == 0 then
-                local labels = { [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
-                    [180] = "S", [225] = "SW", [270] = "W", [315] = "NW" }
-                lcd.drawText(x - ((#labels[normalized] == 2) and 4 or 2), yBottom - 6, labels[normalized], SMLSIZE)
+                lcd.drawText(x - ((#headingLabels[normalized] == 2) and 4 or 2),
+                    yBottom - 6, headingLabels[normalized], SMLSIZE)
             end
         end
     end
@@ -636,7 +642,7 @@ local function run(event)
     for i = 1, 9 do
         local name, unit = string.sub(trim(sName[i]), 1, 4), trim(sUnit[i])
         if name ~= "" then
-            local value = string.format(slotFormats[i], slots[i])
+            local value = string.format(slotFormats[i], slotValues[i])
             if i <= 6 then
                 lcd.drawText(1, 2 + (i - 1) * 11, name .. ":" .. value .. unit, SMLSIZE)
             else
