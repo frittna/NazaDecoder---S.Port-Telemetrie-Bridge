@@ -734,10 +734,10 @@ local function run(event)
     if fix > 0 then
         local blinkOn = math.floor(now / 100) % 2 == 0
         if (fix ~= 1 or blinkOn) and (not warningActive or blinkOn) then
-            drawSatellite(cx - sizeW - 8, cy - sizeH + 1, fix)
+            drawSatellite(cx - sizeW - 14, cy - sizeH + 1, fix)
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(cx - sizeW - 1, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
     end
     lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
     if insideEnabled == 1 then
