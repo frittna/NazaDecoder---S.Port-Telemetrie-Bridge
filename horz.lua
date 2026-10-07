@@ -1,4 +1,4 @@
--- Künstlicher Horizont für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 07.Okt.2026
+-- Künstlicher Horizont und Telemetrie Sensor Anzeige für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 07.Okt.2026
 
 local invPitch, invRoll, invHdg = 0, 0, 0
 local groundMode, attitudeMode = 0, 1
@@ -23,7 +23,7 @@ local CONFIG_READ_LIMIT = 1024
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
-    if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
+    if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) endf
     if y > 0 then return math.pi / 2 end
     if y < 0 then return -math.pi / 2 end
     return 0
@@ -752,7 +752,7 @@ local function run(event)
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
         lcd.drawText(satsX, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
     end
-    lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
+    --lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)  --rausgenommen aus horiz.box, da jetzt mit satelliten symbol gelöst
     if insideEnabled == 1 then
         local entry = catalogByName[string.lower(trim(insideSource))]
         local insideUnit = entry and entry[4] or ""
