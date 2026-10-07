@@ -79,43 +79,48 @@ local function loadConfig()
     setDefaults()
     local f = io.open(modelPath(), "r")
     if f then
-        if io.read(f, "*l") == "HORZCFG=2" then
-            local line = io.read(f, "*l")
-            while line do
-                local key, value = string.match(line, "^([^=]+)=(.*)$")
-                if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
-                    attitudeMode = (value == "VECTOR") and 2 or 1
-                elseif key == "INVERT" then
-                    local p, r, h = string.match(value, "^(%d),(%d),(%d)$")
-                    if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
-                        invPitch, invRoll, invHdg = tonumber(p), tonumber(r), tonumber(h)
-                    end
-                elseif key == "GROUND" and tonumber(value) and tonumber(value) % 1 == 0 and
-                    tonumber(value) >= 0 and tonumber(value) <= 2 then
-                    groundMode = tonumber(value)
-                elseif key == "SOURCES" then
-                    local p, r = string.match(value, "^([^,]+),([^,]+)$")
-                    if p and validText(p, 4) and validText(r, 4) then pitchSource, rollSource = p, r end
-                elseif key == "AXES" then
-                    local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
-                    if validAxis(fwd) and validAxis(side) and validAxis(down) and
-                        string.sub(fwd, 1, 1) ~= string.sub(side, 1, 1) and
-                        string.sub(fwd, 1, 1) ~= string.sub(down, 1, 1) and
-                        string.sub(side, 1, 1) ~= string.sub(down, 1, 1) then
-                        fwdAxis, sideAxis, downAxis = fwd, side, down
-                    end
-                elseif key == "SLOT" then
-                    local i, name, source, unit = string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
-                    i = tonumber(i)
-                    if i and i >= 1 and i <= 9 and validText(name, 12) and
-                        validText(source, 4) and validText(unit, 3) then
-                        sName[i], sSrc[i], sUnit[i] = name, source, unit
+        local contents = io.read(f, 512)
+        io.close(f)
+        if contents then
+            local firstLine = true
+            for line in string.gmatch(contents, "[^\r\n]+") do
+                if firstLine then
+                    firstLine = false
+                    if line ~= "HORZCFG=2" then break end
+                else
+                    local key, value = string.match(line, "^([^=]+)=(.*)$")
+                    if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
+                        attitudeMode = (value == "VECTOR") and 2 or 1
+                    elseif key == "INVERT" then
+                        local p, r, h = string.match(value, "^(%d),(%d),(%d)$")
+                        if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
+                            invPitch, invRoll, invHdg = tonumber(p), tonumber(r), tonumber(h)
+                        end
+                    elseif key == "GROUND" and tonumber(value) and tonumber(value) % 1 == 0 and
+                        tonumber(value) >= 0 and tonumber(value) <= 2 then
+                        groundMode = tonumber(value)
+                    elseif key == "SOURCES" then
+                        local p, r = string.match(value, "^([^,]+),([^,]+)$")
+                        if p and validText(p, 4) and validText(r, 4) then pitchSource, rollSource = p, r end
+                    elseif key == "AXES" then
+                        local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
+                        if validAxis(fwd) and validAxis(side) and validAxis(down) and
+                            string.sub(fwd, 1, 1) ~= string.sub(side, 1, 1) and
+                            string.sub(fwd, 1, 1) ~= string.sub(down, 1, 1) and
+                            string.sub(side, 1, 1) ~= string.sub(down, 1, 1) then
+                            fwdAxis, sideAxis, downAxis = fwd, side, down
+                        end
+                    elseif key == "SLOT" then
+                        local i, name, source, unit = string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
+                        i = tonumber(i)
+                        if i and i >= 1 and i <= 9 and validText(name, 12) and
+                            validText(source, 4) and validText(unit, 3) then
+                            sName[i], sSrc[i], sUnit[i] = name, source, unit
+                        end
                     end
                 end
-                line = io.read(f, "*l")
             end
         end
-        io.close(f)
     end
     configLoaded = true
 end
