@@ -536,8 +536,8 @@ local function run(event)
             end
         end
     end
-    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "degY", SMLSIZE + RIGHT)
-    lcd.drawText(127, 58, string.format("%.0f", roll) .. "degX", SMLSIZE + RIGHT)
+    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
+    lcd.drawText(128, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
     return 0
 end
 
