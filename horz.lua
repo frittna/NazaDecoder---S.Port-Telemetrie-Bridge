@@ -17,18 +17,18 @@ local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
 local defaults = {
     names = { "RSSI", "Alt", "Spd", "Dist", "VSpd", "Hdg", "Batt", "CellD", "Amp" },
     sources = { "RSSI", "Alt", "GSpd", "Dist", "VSpd", "Hdg", "Cels", "celD", "Curr" },
-    units = { "dB", "m", "kmh", "m", "m/s", "deg", "V", "V", "A" }
+    units = { "dB", "m", "kmh", "m", "m/s", "°", "V", "V", "A" }
 }
 local sName, sSrc, sUnit = {}, {}, {}
 
 local catalog = {
     { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
     { "GSpd", "%.0f", 1.852, "kmh" }, { "Dist", "%.0f", 1, "m" },
-    { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "deg" },
+    { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "°" },
     { "Cels", "%.2f", 1, "V" }, { "VFAS", "%.1f", 1, "V" },
     { "Curr", "%.1f", 1, "A" }, { "Sats", "%.0f", 1, "" },
-    { "GFix", "%.0f", 1, "" }, { "Ptch", "%.0f", 1, "deg" },
-    { "Roll", "%.0f", 1, "deg" }, { "AccX", "%.2f", 1, "g" },
+    { "GFix", "%.0f", 1, "" }, { "Ptch", "%.0f", 1, "°" },
+    { "Roll", "%.0f", 1, "°" }, { "AccX", "%.2f", 1, "g" },
     { "AccY", "%.2f", 1, "g" }, { "AccZ", "%.2f", 1, "g" },
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
     { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
