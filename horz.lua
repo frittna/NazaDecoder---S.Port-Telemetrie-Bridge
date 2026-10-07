@@ -107,9 +107,11 @@ local function loadConfig()
                         if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
                             invPitch, invRoll, invHdg = tonumber(p), tonumber(r), tonumber(h)
                         end
-                    elseif key == "GROUND" and tonumber(value) and tonumber(value) % 1 == 0 and
-                        tonumber(value) >= 0 and tonumber(value) <= 2 then
-                        groundMode = tonumber(value)
+                    elseif key == "GROUND" then
+                        local ground = tonumber(value)
+                        if ground and ground % 1 == 0 and ground >= 0 and ground <= 2 then
+                            groundMode = ground
+                        end
                     elseif key == "SOURCES" then
                         local p, r = string.match(value, "^(.-),(.-)$")
                         if p and validText(p, 4) and validText(r, 4) then pitchSource, rollSource = p, r end
@@ -281,10 +283,7 @@ local function handleMenu(event)
             elseif selectedRow == 7 then groundMode = (groundMode + 1) % 3
             end
             if selectedRow == 1 or selectedRow >= 4 then saveConfig() end
-        elseif menuPage == 2 then
-            editField = 1
-            editCharIdx = 1
-        elseif menuPage == 3 then
+        elseif menuPage == 2 or menuPage == 3 then
             editField = 1
             editCharIdx = 1
         elseif menuPage == 4 then
@@ -523,6 +522,7 @@ local function run(event)
     lcd.clear()
     if not configLoaded then loadConfig() end
     if event == EVT_MENU_LONG then
+        if menuActive and axisEditing then saveConfig() end
         menuActive, menuPage, selectedRow, editField = true, 1, 1, 0
         axisEditing = false
         menuOpenTime = getTime()
