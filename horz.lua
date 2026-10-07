@@ -252,6 +252,7 @@ local function handleMenu(event)
             elseif selectedRow == 5 then invRoll = 1 - invRoll
             elseif selectedRow == 6 then invHdg = 1 - invHdg
             elseif selectedRow == 7 then groundMode = (groundMode + 1) % 3
+            end
         elseif menuPage == 2 then
             editField = 1
             editCharIdx = 1
