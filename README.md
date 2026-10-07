@@ -27,7 +27,7 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 - Wenn jemand wie ich dieses umprogrammierte S-ODS Modul verwendet, nicht das GPS wie sonst vorgesehen durch das Modul schleifen. Die Pins des "to GPS" und "to LED" vom Bild des Moduls sind nicht 1:1 durchverbunden.
 - Es muss also vom GPS-Kabel eine einfache Anzapfung für TX und GND gemacht werden, oder viel schöner ist einen Passthrough Stecker aus den ausgelöteten Stecker und Pins basteln die man alle nicht mehr braucht.
 - OPTIONAL: ich einen 3.3V zu 5V Pegelwandler für das serielle GPS-TX-Signal(3.3V) zum Arduino(5V) eingebaut. Also 3.3V aus kleinem Fix-Regler und 5V in den Levelshifter, dessen LV1 zu GPS(TX) und HV1 zu PD7(Pin30).
-- OPTIONAL: MPU-6000-Sketch `NazaSmartPort_Gyro_v1_Arduino_328P.ino` öffnen; nicht gleichzeitig mit der normalen .ino kompilieren.
+- OPTIONAL: MPU-6000-Sketch `NazaSmartPort_Gyro_v1_Arduino_328P.ino` als eigenständigen Sketch öffnen.
 - dazu passt dann mein LUA Skript horz.lua (auf einer Frsky Taranis QX7 mit S/W-Display und Edge-TX 2.11)
 
 ### Lageanzeige

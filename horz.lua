@@ -82,7 +82,7 @@ local function loadConfig()
     setDefaults()
     local f = io.open(modelPath(), "r")
     if f then
-        local contents = io.read(f, 512)
+        local contents = io.read(f, 1024)
         io.close(f)
         if contents then
             local firstLine = true
