@@ -3,12 +3,15 @@
 local invPitch, invRoll, invHdg = 0, 0, 0
 local groundMode, attitudeMode = 0, 1
 local pitchSource, rollSource = "Ptch", "Roll"
+-- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
 local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
 local filteredAlt, filteredHdg = 0, 0
 local menuActive, menuPage, selectedRow = false, 1, 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
 local calibrationStep, calibrationLevel = 0, nil
+local axisEditing = false
 local configLoaded = false
+local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
 
 local defaults = {
     names = { "RSSI", "Alt", "Spd", "Dist", "VSpd", "Hdg", "Batt", "CellD", "Amp" },
@@ -29,7 +32,7 @@ local catalog = {
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
     { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
 }
-local allowedChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/%:-_.+"
+local allowedChars = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789%/:-_.+"
 
 local function trim(str)
     if not str then return "" end
@@ -63,6 +66,14 @@ local function validAxis(value)
         value == "Z+" or value == "Z-"
 end
 
+local function validText(value, maxLen)
+    if #value > maxLen then return false end
+    for i = 1, #value do
+        if not string.find(allowedChars, string.sub(value, i, i), 1, true) then return false end
+    end
+    return true
+end
+
 local function loadConfig()
     setDefaults()
     local f = io.open(modelPath(), "r")
@@ -77,11 +88,12 @@ local function loadConfig()
                     if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
                         invPitch, invRoll, invHdg = tonumber(p), tonumber(r), tonumber(h)
                     end
-                elseif key == "GROUND" and tonumber(value) and tonumber(value) >= 0 and tonumber(value) <= 2 then
+                elseif key == "GROUND" and tonumber(value) and tonumber(value) % 1 == 0 and
+                    tonumber(value) >= 0 and tonumber(value) <= 2 then
                     groundMode = tonumber(value)
                 elseif key == "SOURCES" then
                     local p, r = string.match(value, "^([^,]+),([^,]+)$")
-                    if p and #p <= 8 and #r <= 8 then pitchSource, rollSource = p, r end
+                    if p and validText(p, 4) and validText(r, 4) then pitchSource, rollSource = p, r end
                 elseif key == "AXES" then
                     local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
                     if validAxis(fwd) and validAxis(side) and validAxis(down) and
@@ -93,7 +105,8 @@ local function loadConfig()
                 elseif key == "SLOT" then
                     local i, name, source, unit = string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
                     i = tonumber(i)
-                    if i and i >= 1 and i <= 9 and #name <= 12 and #source <= 8 and #unit <= 4 then
+                    if i and i >= 1 and i <= 9 and validText(name, 12) and
+                        validText(source, 4) and validText(unit, 3) then
                         sName[i], sSrc[i], sUnit[i] = name, source, unit
                     end
                 end
@@ -153,18 +166,17 @@ local function cycleAxis(which, delta)
     local sign = string.sub(current, 2, 2)
     local axes = { "X", "Y", "Z" }
     local at = string.find("XYZ", string.sub(current, 1, 1), 1, true) or 1
-    for _ = 1, 3 do
-        at = ((at - 1 + delta) % 3) + 1
-        local candidate = axes[at] .. sign
-        if (which ~= 1 or (candidate ~= sideAxis and candidate ~= downAxis)) and
-            (which ~= 2 or (candidate ~= fwdAxis and candidate ~= downAxis)) and
-            (which ~= 3 or (candidate ~= fwdAxis and candidate ~= sideAxis)) then
-            if which == 1 then fwdAxis = candidate
-            elseif which == 2 then sideAxis = candidate
-            else downAxis = candidate end
-            return
-        end
+    local candidateAxis = axes[((at - 1 + delta) % 3) + 1]
+    local assignments = { fwdAxis, sideAxis, downAxis }
+    local owner
+    for i = 1, 3 do
+        if i ~= which and string.sub(assignments[i], 1, 1) == candidateAxis then owner = i end
     end
+    if owner then
+        assignments[owner] = string.sub(current, 1, 1) .. string.sub(assignments[owner], 2, 2)
+    end
+    assignments[which] = candidateAxis .. sign
+    fwdAxis, sideAxis, downAxis = assignments[1], assignments[2], assignments[3]
 end
 
 local function handleMenu(event)
@@ -176,13 +188,13 @@ local function handleMenu(event)
         if menuPage == 1 then
             target = (selectedRow == 2) and "pitch" or "roll"
             text = (target == "pitch") and pitchSource or rollSource
-            maxLen = 8
+            maxLen = 4
         else
             local slot = slotIndex()
             target = (editField == 1) and "name" or ((editField == 2) and "source" or "unit")
             text = (target == "name" and sName[slot]) or
                 (target == "source" and sSrc[slot]) or sUnit[slot]
-            maxLen = (target == "name") and 8 or ((target == "source") and 8 or 4)
+            maxLen = (target == "unit") and 3 or 4
         end
         if (negative or positive) and menuPage ~= 1 and editField == 2 and not (event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT) then
             cycleCatalog(slotIndex(), negative and -1 or 1)
@@ -209,7 +221,7 @@ local function handleMenu(event)
         return true
     end
 
-    if menuPage == 4 and selectedRow <= 3 and (negative or positive) then
+    if menuPage == 4 and axisEditing and selectedRow <= 3 and (negative or positive) then
         cycleAxis(selectedRow, positive and 1 or -1)
         saveConfig()
     elseif negative or positive then
@@ -218,9 +230,11 @@ local function handleMenu(event)
     elseif event == EVT_PAGE_BREAK then
         menuPage = (menuPage % 4) + 1
         selectedRow = 1
+        axisEditing = false
     elseif event == EVT_EXIT_BREAK then
         saveConfig()
         menuActive = false
+        axisEditing = false
     elseif event == EVT_ENTER_BREAK then
         if menuPage == 1 then
             if selectedRow == 1 then attitudeMode = (attitudeMode == 1) and 2 or 1
@@ -238,11 +252,19 @@ local function handleMenu(event)
             else menuPage = 4; selectedRow = 1 end
         elseif menuPage == 4 then
             if selectedRow <= 3 then
+                if axisEditing then
                     local axis = (selectedRow == 1 and fwdAxis) or (selectedRow == 2 and sideAxis) or downAxis
-                    local value = string.sub(axis, 1, 1) .. ((string.sub(axis, 2, 2) == "+") and "-" or "+")
-                    if selectedRow == 1 then fwdAxis = value elseif selectedRow == 2 then sideAxis = value else downAxis = value end
+                    local value = string.sub(axis, 1, 1) ..
+                        ((string.sub(axis, 2, 2) == "+") and "-" or "+")
+                    if selectedRow == 1 then fwdAxis = value
+                    elseif selectedRow == 2 then sideAxis = value
+                    else downAxis = value end
+                    axisEditing = false
+                else
+                    axisEditing = true
+                end
             elseif selectedRow == 4 then calibrationStep = 1
-            else menuPage = 1; selectedRow = 1 end
+            else menuPage = 1; selectedRow = 1; axisEditing = false end
         end
         saveConfig()
     end
@@ -261,10 +283,11 @@ end
 
 local function calibrate(event)
     local values = vectorValues()
-    if calibrationStep == 1 then
+    if calibrationStep == 1 and event == EVT_ENTER_BREAK then
         local index = 1
         if math.abs(values[2]) > math.abs(values[index]) then index = 2 end
         if math.abs(values[3]) > math.abs(values[index]) then index = 3 end
+        if math.abs(values[index]) < 0.15 then return end
         local axis = ({ "X", "Y", "Z" })[index]
         downAxis = axis .. ((values[index] >= 0) and "+" or "-")
         calibrationLevel = { values = values, down = index }
@@ -272,6 +295,7 @@ local function calibrate(event)
     elseif calibrationStep == 2 and (event == EVT_ENTER_BREAK) then
         local remain = {}
         for i = 1, 3 do if i ~= calibrationLevel.down then remain[#remain + 1] = i end end
+        if math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2) < 0.15 then return end
         local forward = (math.abs(values[remain[1]]) >= math.abs(values[remain[2]])) and remain[1] or remain[2]
         local other = (forward == remain[1]) and remain[2] or remain[1]
         fwdAxis = ({ "X", "Y", "Z" })[forward] .. ((values[forward] >= 0) and "+" or "-")
@@ -285,7 +309,7 @@ local function calibrate(event)
             fVec[3] * sideVector[1] - fVec[1] * sideVector[3],
             fVec[1] * sideVector[2] - fVec[2] * sideVector[1]
         }
-        local sideSign = (cross[other] * dSign >= 0) and 1 or -1
+        local sideSign = (cross[calibrationLevel.down] * dSign >= 0) and 1 or -1
         sideAxis = ({ "X", "Y", "Z" })[other] .. ((sideSign > 0) and "+" or "-")
         calibrationStep = 0
         calibrationLevel = nil
@@ -296,7 +320,7 @@ end
 local function drawMenu(event)
     lcd.drawText(1, 1, "-- CONFIG " .. menuPage .. "/4 --", INVERS)
     if calibrationStep > 0 then
-        lcd.drawText(1, 15, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten, ENTER", 0)
+        lcd.drawText(1, 15, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
         lcd.drawText(1, 29, "ENTER: messen / EXIT: Ende", 0)
         if event == EVT_EXIT_BREAK then calibrationStep = 0 end
         return
@@ -320,7 +344,9 @@ local function drawMenu(event)
         end
         rows[#rows + 1] = "[scroll]"
     else
-        rows = { "Fwd : " .. fwdAxis, "Side: " .. sideAxis, "Down: " .. downAxis,
+        rows = { "Fwd" .. (axisEditing and selectedRow == 1 and "*" or " ") .. ": " .. fwdAxis,
+            "Side" .. (axisEditing and selectedRow == 2 and "*" or " ") .. ": " .. sideAxis,
+            "Down" .. (axisEditing and selectedRow == 3 and "*" or " ") .. ": " .. downAxis,
             "Calibrate", "[scroll]" }
     end
     local y = 10
@@ -341,10 +367,11 @@ end
 local function init()
     menuActive, menuPage, selectedRow = false, 1, 1
     editField, editCharIdx, menuOpenTime = 0, 1, 0
+    axisEditing = false
     configLoaded = false
 end
 
-local function readSlot(source)
+local function readSlot(source, unit)
     local raw = getValue(source)
     if type(raw) == "table" then
         local total = 0
@@ -359,6 +386,7 @@ local function readSlot(source)
             break
         end
     end
+    if string.lower(source) == "gspd" and trim(unit) ~= "kmh" then scale = 1 end
     return value * scale, fmt
 end
 
@@ -373,8 +401,8 @@ local function getAttitude()
         local magnitude = math.sqrt(fwd * fwd + side * side + down * down)
         if magnitude > 0.001 then fwd, side, down = fwd / magnitude, side / magnitude, down / magnitude
         else fwd, side, down = 0, 0, 1 end
-        pitch = math.atan2(-fwd, math.sqrt(side * side + down * down)) * 57.2957795
-        roll = math.atan2(side, down) * 57.2957795
+        pitch = atan2(-fwd, math.sqrt(side * side + down * down)) * 57.2957795
+        roll = atan2(side, down) * 57.2957795
     end
     pitch = pitch * ((invPitch == 1) and -1 or 1)
     roll = roll * ((invRoll == 1) and -1 or 1)
@@ -386,6 +414,7 @@ local function run(event)
     if not configLoaded then loadConfig() end
     if event == EVT_MENU_LONG then
         menuActive, menuPage, selectedRow, editField = true, 1, 1, 0
+        axisEditing = false
         menuOpenTime = getTime()
     end
     if menuActive then
@@ -400,10 +429,10 @@ local function run(event)
     end
 
     local slots, slotFormats = {}, {}
-    for i = 1, 9 do slots[i], slotFormats[i] = readSlot(trim(sSrc[i])) end
+    for i = 1, 9 do slots[i], slotFormats[i] = readSlot(trim(sSrc[i]), sUnit[i]) end
     filteredAlt = slots[2] * 0.25 + filteredAlt * 0.75
     local pitch, roll = getAttitude()
-    local rawHdg = slots[6] * ((invHdg == 1) and -1 or 1)
+    local rawHdg = (tonumber(getValue("Hdg")) or 0) * ((invHdg == 1) and -1 or 1)
     rawHdg = (rawHdg % 360 + 360) % 360
     local headingDiff = ((rawHdg - filteredHdg + 180) % 360) - 180
     filteredHdg = (filteredHdg + headingDiff * 0.3) % 360
@@ -417,9 +446,9 @@ local function run(event)
     if groundMode > 0 then
         for y = cy - sizeH + 1, cy + sizeH - 1 do
             local left, right = cx - sizeW + 1, cx + sizeW - 1
-            if dy ~= 0 then
+            if math.abs(dy) > 0.01 then
                 local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
-                if (dy > 0 and not isUpsideDown) or (dy < 0 and isUpsideDown) then right = math.min(right, cross)
+                if dy > 0 then right = math.min(right, cross)
                 else left = math.max(left, cross) end
             elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
                 if y <= cy + pitchOffset then left = right + 1 end
@@ -439,14 +468,17 @@ local function run(event)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     local alt = filteredAlt
-    local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
-    if altTickY >= cy - sizeH + 2 and altTickY <= cy + sizeH - 2 then
-        lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
+    if trim(sSrc[2]) == "Alt" then
+        local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
+        if altTickY >= cy - sizeH + 2 and altTickY <= cy + sizeH - 2 then
+            lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
+        end
     end
     lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", tonumber(getValue("Sats")) or 0), SMLSIZE)
     local fix = tonumber(getValue("GFix")) or 0
     lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
-    lcd.drawText(cx, cy - 13, string.format("%.0f", alt) .. trim(sUnit[2]), SMLSIZE + CENTER)
+    lcd.drawText(cx, cy - 13, trim(sName[2]) .. ":" ..
+        string.format(slotFormats[2], alt) .. trim(sUnit[2]), SMLSIZE + CENTER)
 
     local yBottom = cy - sizeH - 1
     lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)
@@ -466,7 +498,7 @@ local function run(event)
     end
 
     for i = 1, 9 do
-        local name, unit = trim(sName[i]), trim(sUnit[i])
+        local name, unit = string.sub(trim(sName[i]), 1, 4), trim(sUnit[i])
         if name ~= "" then
             local value = string.format(slotFormats[i], slots[i])
             if i <= 6 then

@@ -30,6 +30,10 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 - ebenfalls OPTIONAL: Es wurde auch ein MPU-6000 Lagesensor hinzugefügt, dafür die NazaSmartPort_Gyro_Arduino_328P.ino_optional statt der normalen .ino vompilieren (keine 2 gleichen .ino in einem Sketchordner!).
 - dazu passt dann mein LUA Skript horz.lua (auf einer Frsky Taranis QX7 mit S/W-Display und Edge-TX 2.11)
 
+### Lageanzeige
+
+`horz.lua` bietet die Quellen `ANGLES` (Empfängerwerte `Ptch`/`Roll`) und `VECTOR` (normierte `AccX/Y/Z`). Im Vektormodus sind `fwd`, `side` und `down` samt Vorzeichen einstellbar; `Calibrate` ermittelt zuerst die Schwerkraftachse und danach durch Nase-abwärts-Neigen die Vorwärtsachse. Für den seitlich montierten Archer passen als Startwert `fwd=X+`, `side=Z-`, `down=Y+`: Nase abwärts ergibt `AccX+`, rechts unten `AccZ+`, und unten ist `AccY+`. Beim Arduino-Ausgabeformat mit den Standard-Defines lautet die passende Zuordnung dagegen `fwd=X+`, `side=Y+`, `down=Z-`; `Z` ist bei Label oben etwa `-1 g`. Pitch/Roll werden nicht mit Rohachsen vermischt; Heading bleibt `Hdg` von der Naza.
+
 ### Programmierung bei 328P
 - Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
 - ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
@@ -43,4 +47,3 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 ![](lua_main_screen.jpg)
 
 ![](lua_settings_screens.jpg)
-

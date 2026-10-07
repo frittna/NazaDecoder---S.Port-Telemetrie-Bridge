@@ -19,10 +19,11 @@
 #define SPORT_Y_SOURCE 1
 #define SPORT_Y_SIGN 1
 #define SPORT_Z_SOURCE 2
-#define SPORT_Z_SIGN -1
+#define SPORT_Z_SIGN 1
 #define PITCH_GYRO_SIGN 1
 #define ROLL_GYRO_SIGN 1
 
+#undef LED_BUILTIN
 #define LED_BUILTIN 9
 #define MPU_ADDR 0x68
 #define USE_TESTDATA 0
