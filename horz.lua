@@ -103,8 +103,15 @@ local function loadConfig()
     configLoadWarning = false
     local f = io.open(modelPath(), "r")
     if f then
-        local contents = io.read(f, CONFIG_READ_LIMIT)
+        local chunks, total = {}, 0
+        while total < CONFIG_READ_LIMIT do
+            local chunk = io.read(f, math.min(128, CONFIG_READ_LIMIT - total))
+            if not chunk or #chunk == 0 then break end
+            chunks[#chunks + 1] = chunk
+            total = total + #chunk
+        end
         io.close(f)
+        local contents = table.concat(chunks)
         if contents then
             local firstLine = true
             for line in string.gmatch(contents, "[^\r\n]+") do
@@ -627,7 +634,7 @@ local function run(event)
     lcd.drawLine(cx, yBottom, cx, yBottom - 3, SOLID, FORCE)
     for i = -6, 6 do
         local angle = (math.floor(hdg / 5) + i) * 5
-        local normalized = (angle % 360 + 360) % 360
+        local normalized = math.floor((angle % 360 + 360) % 360)
         local diff = ((angle - hdg + 180) % 360) - 180
         local x = cx + diff * 0.75
         if x >= cx - sizeW and x <= cx + sizeW then

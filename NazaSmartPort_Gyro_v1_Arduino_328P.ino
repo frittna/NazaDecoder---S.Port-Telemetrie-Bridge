@@ -15,6 +15,7 @@
 
 // Montageanpassung: Index 0/1/2 = gX/gY/gZ; Vorzeichen nach Bedarf ändern.
 // SPORT-Z folgt dem fusionierten Schwerkraftvektor: bei Modell-Level etwa -1 g.
+// Lua-Menü für diesen Gyro-Output: fwd=X+, side=Y+, down=Z- (manuell einstellen).
 #define SPORT_X_SOURCE 0
 #define SPORT_X_SIGN 1
 #define SPORT_Y_SOURCE 1
