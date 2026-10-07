@@ -256,7 +256,7 @@ local function handleMenu(event)
     if editField > 0 then
         local text, maxLen, target
         if menuPage == 1 then
-            target = (selectedRow == 2) and "pitch" or "roll"
+            target = (selectedRow == 3) and "pitch" or "roll"
             text = (target == "pitch") and pitchSource or rollSource
             maxLen = 4
         else
@@ -315,14 +315,14 @@ local function handleMenu(event)
         if selectedRow > menuContentRows() then
             nextMenuPage()
         elseif menuPage == 1 then
-            if selectedRow == 1 then attitudeMode = (attitudeMode == 1) and 2 or 1
-            elseif selectedRow == 2 or selectedRow == 3 then editField = 1; editCharIdx = 1
-            elseif selectedRow == 4 then invPitch = 1 - invPitch
-            elseif selectedRow == 5 then invRoll = 1 - invRoll
-            elseif selectedRow == 6 then invHdg = 1 - invHdg
-            elseif selectedRow == 7 then groundMode = (groundMode + 1) % 3
+            if selectedRow == 1 then groundMode = (groundMode + 1) % 3
+            elseif selectedRow == 2 then attitudeMode = (attitudeMode == 1) and 2 or 1
+            elseif selectedRow == 3 or selectedRow == 4 then editField = 1; editCharIdx = 1
+            elseif selectedRow == 5 then invPitch = 1 - invPitch
+            elseif selectedRow == 6 then invRoll = 1 - invRoll
+            elseif selectedRow == 7 then invHdg = 1 - invHdg
             end
-            if selectedRow == 1 or selectedRow >= 4 then saveConfig() end
+            if selectedRow <= 2 or selectedRow >= 5 then saveConfig() end
         elseif menuPage == 2 or menuPage == 3 then
             editField = 1
             editCharIdx = 1
@@ -448,12 +448,12 @@ local function drawMenu(event)
     end
     if menuPage == 1 then
         local rows = {
+            { "Ground:", ({ "White", "Lines", "Points" })[groundMode + 1] },
             { "Attitude:", (attitudeMode == 1) and "ANGLES" or "VECTOR" },
             { "Pitch src:", pitchSource }, { "Roll src:", rollSource },
-            { "Pitch inv:", (invPitch == 1) and "YES" or "NO" },
-            { "Roll inv:", (invRoll == 1) and "YES" or "NO" },
-            { "Hdg inv:", (invHdg == 1) and "YES" or "NO" },
-            { "Ground:", ({ "White", "Lines", "Points" })[groundMode + 1] }
+            { "Pitch inv:", (invPitch == 1) and "YES" or "-" },
+            { "Roll inv:", (invRoll == 1) and "YES" or "-" },
+            { "Hdg inv:", (invHdg == 1) and "YES" or "-" }
         }
         for i = 1, #rows do
             local y = 9 + (i - 1) * 7
@@ -461,9 +461,9 @@ local function drawMenu(event)
             lcd.drawText(1, y, selected and ">" or " ", selected and INVERS or 0)
             lcd.drawText(8, y, rows[i][1], selected and editField == 0 and INVERS or 0)
             local value = rows[i][2]
-            local valueX = (i == 2 or i == 3) and 77 or 73
-            if editField > 0 and (i == 2 or i == 3) then
-                local source = (i == 2) and pitchSource or rollSource
+            local valueX = (i == 3 or i == 4) and 77 or 73
+            if editField > 0 and (i == 3 or i == 4) then
+                local source = (i == 3) and pitchSource or rollSource
                 lcd.drawText(valueX, y, editDisplay(source, 4), INVERS + SMLSIZE)
             else
                 lcd.drawText(valueX, y, value, 0)
