@@ -226,13 +226,13 @@ local function handleMenu(event)
             end
         elseif event == EVT_EXIT_BREAK then
             editField = 0
+            saveConfig()
         end
         return true
     end
 
     if menuPage == 4 and axisEditing and selectedRow <= 3 and (negative or positive) then
         cycleAxis(selectedRow, positive and 1 or -1)
-        saveConfig()
     elseif negative or positive then
         local delta = positive and 1 or -1
         selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
@@ -253,6 +253,7 @@ local function handleMenu(event)
             elseif selectedRow == 6 then invHdg = 1 - invHdg
             elseif selectedRow == 7 then groundMode = (groundMode + 1) % 3
             end
+            if selectedRow == 1 or selectedRow >= 4 then saveConfig() end
         elseif menuPage == 2 then
             editField = 1
             editCharIdx = 1
@@ -269,6 +270,7 @@ local function handleMenu(event)
                     elseif selectedRow == 2 then sideAxis = value
                     else downAxis = value end
                     axisEditing = false
+                    saveConfig()
                 else
                     axisEditing = true
                 end
@@ -278,7 +280,6 @@ local function handleMenu(event)
                 calibrationMessage = ""
             end
         end
-        saveConfig()
     end
     return true
 end
@@ -372,7 +373,6 @@ local function drawMenu(event)
             tonumber(values[1]) or 0, tonumber(values[2]) or 0, tonumber(values[3]) or 0), SMLSIZE)
         lcd.drawText(1, 36, calibrationMessage, INVERS)
         lcd.drawText(1, 50, "ENTER: messen EXIT: Ende", SMLSIZE)
-        lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT)
         return
     end
     if menuPage == 1 then
@@ -430,11 +430,12 @@ local function drawMenu(event)
             local selected = i == selectedRow
             lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
         end
-        lcd.drawText(1, 44, "Manuell: +/- Achse, ENTER Vorzeichen", SMLSIZE)
+        if calibrationMessage ~= "" then
+            lcd.drawText(1, 44, calibrationMessage, SMLSIZE)
+        else
+            lcd.drawText(1, 44, "Manuell: +/- Achse, ENTER Vorzeichen", SMLSIZE)
+        end
         lcd.drawText(1, 52, "Calibrate: Level, dann Nase abwaerts", SMLSIZE)
-    end
-    if menuPage == 4 and calibrationMessage ~= "" then
-        lcd.drawText(1, 44, calibrationMessage, SMLSIZE)
     end
     lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT)
 end
