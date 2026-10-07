@@ -9,6 +9,7 @@ local filteredAlt, filteredHdg = 0, 0
 local menuActive, menuPage, selectedRow = false, 1, 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
 local calibrationStep, calibrationLevel = 0, nil
+local calibrationMessage = ""
 local axisEditing = false
 local configLoaded = false
 local atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
@@ -265,7 +266,10 @@ local function handleMenu(event)
                 else
                     axisEditing = true
                 end
-            elseif selectedRow == 4 then calibrationStep = 1
+            elseif selectedRow == 4 then
+                calibrationStep = 1
+                calibrationLevel = nil
+                calibrationMessage = ""
             else menuPage = 1; selectedRow = 1; axisEditing = false end
         end
         saveConfig()
@@ -289,15 +293,22 @@ local function calibrate(event)
         local index = 1
         if math.abs(values[2]) > math.abs(values[index]) then index = 2 end
         if math.abs(values[3]) > math.abs(values[index]) then index = 3 end
-        if math.abs(values[index]) < 0.15 then return end
+        if math.abs(values[index]) < 0.15 then
+            calibrationMessage = "Acc-Signal fehlt"
+            return
+        end
         local axis = ({ "X", "Y", "Z" })[index]
         downAxis = axis .. ((values[index] >= 0) and "+" or "-")
         calibrationLevel = { values = values, down = index }
         calibrationStep = 2
+        calibrationMessage = "Level erfasst"
     elseif calibrationStep == 2 and (event == EVT_ENTER_BREAK) then
         local remain = {}
         for i = 1, 3 do if i ~= calibrationLevel.down then remain[#remain + 1] = i end end
-        if math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2) < 0.15 then return end
+        if math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2) < 0.15 then
+            calibrationMessage = "Nase staerker neigen"
+            return
+        end
         local forward = (math.abs(values[remain[1]]) >= math.abs(values[remain[2]])) and remain[1] or remain[2]
         local other = (forward == remain[1]) and remain[2] or remain[1]
         fwdAxis = ({ "X", "Y", "Z" })[forward] .. ((values[forward] >= 0) and "+" or "-")
@@ -315,6 +326,7 @@ local function calibrate(event)
         sideAxis = ({ "X", "Y", "Z" })[other] .. ((sideSign > 0) and "+" or "-")
         calibrationStep = 0
         calibrationLevel = nil
+        calibrationMessage = "Kalibrierung OK"
         saveConfig()
     end
 end
@@ -322,9 +334,12 @@ end
 local function drawMenu(event)
     lcd.drawText(1, 1, "-- CONFIG " .. menuPage .. "/4 --", INVERS)
     if calibrationStep > 0 then
-        lcd.drawText(1, 15, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
-        lcd.drawText(1, 29, "ENTER: messen / EXIT: Ende", 0)
-        if event == EVT_EXIT_BREAK then calibrationStep = 0 end
+        local values = vectorValues()
+        lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
+        lcd.drawText(1, 24, string.format("X:%.1f Y:%.1f Z:%.1f",
+            tonumber(values[1]) or 0, tonumber(values[2]) or 0, tonumber(values[3]) or 0), SMLSIZE)
+        lcd.drawText(1, 36, calibrationMessage, INVERS)
+        lcd.drawText(1, 50, "ENTER: messen EXIT: Ende", SMLSIZE)
         return
     end
     local rows
@@ -364,12 +379,16 @@ local function drawMenu(event)
         lcd.drawText(1, y, text, (i == selectedRow) and INVERS or 0)
         y = y + 7
     end
+    if menuPage == 4 and calibrationMessage ~= "" then
+        lcd.drawText(1, 55, calibrationMessage, SMLSIZE)
+    end
 end
 
 local function init()
     menuActive, menuPage, selectedRow = false, 1, 1
     editField, editCharIdx, menuOpenTime = 0, 1, 0
     axisEditing = false
+    calibrationStep, calibrationLevel, calibrationMessage = 0, nil, ""
     configLoaded = false
 end
 
@@ -421,8 +440,13 @@ local function run(event)
     end
     if menuActive then
         if calibrationStep > 0 then
-            calibrate(event)
-            if event == EVT_EXIT_BREAK then calibrationStep = 0 end
+            if event == EVT_EXIT_BREAK then
+                calibrationStep = 0
+                calibrationLevel = nil
+                calibrationMessage = "Abgebrochen"
+            else
+                calibrate(event)
+            end
         else
             handleMenu(event)
         end
