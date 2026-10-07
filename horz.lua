@@ -7,6 +7,7 @@ local insideSource, insideEnabled = "Alt", 1
 -- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
 local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
 local filteredAlt, filteredHdg = 0, 0
+local gpsFix3Since, gpsLowFixSince, gpsWarningSince = nil, nil, nil
 local menuActive, menuPage, selectedRow = false, 1, 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
 local calibrationStep, calibrationLevel = 0, nil
@@ -596,6 +597,48 @@ local function readSlot(source, unit)
     return value * scale, fmt
 end
 
+local satelliteBase = {
+    { 0, 5 }, { 1, 4 }, { 2, 3 }, { 3, 2 }, { 4, 3 }, { 5, 4 }, { 6, 5 },
+    { 0, 4 }, { 1, 5 }, { 5, 3 }, { 6, 4 }
+}
+local satelliteInnerRays = { { 4, 1 }, { 5, 0 }, { 5, 2 } }
+local satelliteOuterRays = { { 6, 0 }, { 6, 1 }, { 6, 2 } }
+
+local function updateGPSWarning(fix, now)
+    if gpsWarningSince and now - gpsWarningSince >= 6000 then
+        gpsWarningSince = nil
+    end
+
+    if fix == 3 then
+        if gpsLowFixSince then gpsFix3Since = now end
+        gpsLowFixSince = nil
+        if not gpsFix3Since then gpsFix3Since = now end
+    elseif gpsFix3Since then
+        if now - gpsFix3Since <= 1000 then
+            gpsFix3Since, gpsLowFixSince = nil, nil
+        elseif not gpsLowFixSince then
+            gpsLowFixSince = now
+        elseif now - gpsLowFixSince > 300 and not gpsWarningSince then
+            gpsWarningSince = now
+            gpsFix3Since, gpsLowFixSince = nil, nil
+        end
+    end
+
+    return gpsWarningSince ~= nil
+end
+
+local function drawSatellitePoints(x, y, points)
+    for i = 1, #points do
+        lcd.drawPoint(x + points[i][1], y + points[i][2])
+    end
+end
+
+local function drawSatellite(x, y, fix)
+    drawSatellitePoints(x, y, satelliteBase)
+    if fix >= 2 then drawSatellitePoints(x, y, satelliteInnerRays) end
+    if fix >= 3 then drawSatellitePoints(x, y, satelliteOuterRays) end
+end
+
 local function getAttitude()
     local pitch, roll
     if attitudeMode == 1 then
@@ -685,8 +728,17 @@ local function run(event)
             lcd.drawLine(cx - sizeW + 1, altTickY, cx - sizeW + 4, altTickY, SOLID, FORCE)
         end
     end
-    lcd.drawText(cx - sizeW - 7, cy - sizeH + 2, string.format("%.0f", tonumber(getValue("Sats")) or 0), SMLSIZE)
-    local fix = tonumber(getValue("GFix")) or 0
+    local now = getTime()
+    local fix = math.max(0, math.min(3, math.floor(tonumber(getValue("GFix")) or 0)))
+    local warningActive = updateGPSWarning(fix, now)
+    if fix > 0 then
+        local blinkOn = math.floor(now / 100) % 2 == 0
+        if (fix ~= 1 or blinkOn) and (not warningActive or blinkOn) then
+            drawSatellite(cx - sizeW - 8, cy - sizeH + 1, fix)
+        end
+        local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
+        lcd.drawText(cx - sizeW - 1, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
+    end
     lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)
     if insideEnabled == 1 then
         local entry = catalogByName[string.lower(trim(insideSource))]
