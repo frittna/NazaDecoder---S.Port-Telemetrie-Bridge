@@ -535,13 +535,13 @@ local function drawMenu(event)
             local sourceSelected = selectedRow == 4
             local enabledSelected = selectedRow == 5
             lcd.drawText(1, sourceRowY, sourceSelected and ">" or " ", sourceSelected and INVERS or 0)
-            lcd.drawText(9, sourceRowY, "Inside Hor.",
+            lcd.drawText(9, sourceRowY, "Inside Horizon",
                 (sourceSelected and editField == 0) and INVERS or 0)
             lcd.drawText(127, sourceRowY, "[" .. insideSource .. "]",
                 RIGHT + ((sourceSelected and editField == 4) and INVERS or 0))
             lcd.drawText(1, enabledRowY, enabledSelected and ">" or " ",
                 enabledSelected and INVERS or 0)
-            lcd.drawText(9, enabledRowY, "Anzeige:",
+            lcd.drawText(9, enabledRowY, "show it:",
                 (enabledSelected and editField == 0) and INVERS or 0)
             lcd.drawText(127, enabledRowY, (insideEnabled == 1) and "[X]" or "[ ]",
                 RIGHT + ((enabledSelected and editField == 0) and INVERS or 0))
