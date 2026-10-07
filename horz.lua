@@ -240,8 +240,8 @@ end
 
 local function handleMenu(event)
     if getTime() - menuOpenTime < MENU_OPEN_DEBOUNCE then return true end
-    local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT
-    local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT
+    local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT or event == EVT_VIRTUAL_PREV
+    local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
     if editField > 0 then
         local text, maxLen, target
         if menuPage == 1 then
@@ -256,7 +256,8 @@ local function handleMenu(event)
             maxLen = (target == "name") and SLOT_NAME_MAX or ((target == "unit") and 3 or 4)
         end
         -- Bei Slot-Quellen waehlt +/- Katalogsensoren; der Drehgeber editiert Zeichen.
-        local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT
+        local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
+            event == EVT_VIRTUAL_PREV or event == EVT_VIRTUAL_NEXT
         local isCatalogCycle = (negative or positive) and menuPage ~= 1 and editField == 2 and not isRotary
         if isCatalogCycle then
             cycleCatalog(slotIndex(), negative and -1 or 1)
