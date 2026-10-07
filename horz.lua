@@ -675,9 +675,10 @@ local function homeDirection(lat, lon)
     local distance = 12742000 * atan2(math.sqrt(a), math.sqrt(1 - a))
     if distance <= 5 then return nil, distance end
 
-    local bearingY = math.sin(deltaLon) * math.cos(lat2)
-    local bearingX = math.cos(lat1) * math.sin(lat2) -
-        math.sin(lat1) * math.cos(lat2) * math.cos(deltaLon)
+    local homeLonDelta = (homeLon - lon) * toRadians
+    local bearingY = math.sin(homeLonDelta) * math.cos(lat1)
+    local bearingX = math.cos(lat2) * math.sin(lat1) -
+        math.sin(lat2) * math.cos(lat1) * math.cos(homeLonDelta)
     local bearing = (atan2(bearingY, bearingX) / toRadians) % 360
     return bearing, distance
 end
