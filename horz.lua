@@ -78,8 +78,9 @@ local function loadConfig()
     setDefaults()
     local f = io.open(modelPath(), "r")
     if f then
-        if f:read("*l") == "HORZCFG=2" then
-            for line in f:lines() do
+        if io.read(f, "*l") == "HORZCFG=2" then
+            local line = io.read(f, "*l")
+            while line do
                 local key, value = string.match(line, "^([^=]+)=(.*)$")
                 if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
                     attitudeMode = (value == "VECTOR") and 2 or 1
@@ -110,6 +111,7 @@ local function loadConfig()
                         sName[i], sSrc[i], sUnit[i] = name, source, unit
                     end
                 end
+                line = io.read(f, "*l")
             end
         end
         io.close(f)
