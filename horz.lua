@@ -14,7 +14,7 @@ local axisMessage = ""
 local configSaveFailed = false
 local axisEditing = false
 local configLoaded = false
--- Maximal 338 Byte fuer Format v2; der Puffer laesst Reserve fuer kuenftige Felder.
+-- 338 Byte = 77 feste Bytes + 9 SLOT-Zeilen je 29 Byte (Name 12, Quelle 4, Einheit 3).
 local CONFIG_READ_LIMIT = 1024
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
@@ -390,10 +390,8 @@ local function drawMenu(event)
         "-- CONFIG (1/4) --", "-- SENSORS LEFT (2/4) --",
         "-- SENSORS RIGHT (3/4) --", "-- AXIS MAPPING (4/4) --"
     }
-    lcd.drawText(1, 1, titles[menuPage], SMLSIZE)
-    if configSaveFailed then
-        lcd.drawText(127, 1, "ERR", SMLSIZE + RIGHT + INVERS)
-    end
+    lcd.drawText(1, 1, configSaveFailed and "SAVE FAILED" or titles[menuPage],
+        configSaveFailed and (SMLSIZE + INVERS) or SMLSIZE)
     if calibrationStep > 0 then
         local values = vectorValues()
         lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
@@ -480,6 +478,7 @@ local function init()
 end
 
 local function readSlot(source, unit)
+    if trim(source) == "" then return 0, "%.1f" end
     local raw = getValue(source)
     if type(raw) == "table" then
         local total = 0
@@ -501,8 +500,8 @@ end
 local function getAttitude()
     local pitch, roll
     if attitudeMode == 1 then
-        pitch = tonumber(getValue(pitchSource)) or 0
-        roll = tonumber(getValue(rollSource)) or 0
+        pitch = (trim(pitchSource) ~= "") and (tonumber(getValue(pitchSource)) or 0) or 0
+        roll = (trim(rollSource) ~= "") and (tonumber(getValue(rollSource)) or 0) or 0
     else
         local values = vectorValues()
         local fwd, side, down = axisValue(values, fwdAxis), axisValue(values, sideAxis), axisValue(values, downAxis)
@@ -625,7 +624,7 @@ local function run(event)
     end
     lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
     lcd.drawText(128, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
-    if configSaveFailed then lcd.drawText(52, 0, "SAVE ERR", SMLSIZE + INVERS) end
+    if configSaveFailed then lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS) end
     return 0
 end
 
