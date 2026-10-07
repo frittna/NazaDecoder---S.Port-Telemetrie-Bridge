@@ -23,7 +23,7 @@ local CONFIG_READ_LIMIT = 1024
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
-    if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) endf
+    if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
     if y > 0 then return math.pi / 2 end
     if y < 0 then return -math.pi / 2 end
     return 0
