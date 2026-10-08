@@ -848,20 +848,20 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     -- Dezente 45°- und 90°-Marken mit beweglicher Pitch-/Roll-Anzeige.
     local rollMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #rollMarks do
-        local x = cx + math.sin(rollMarks[i] * 0.01745329252) * sizeW
+        local x = cx + (rollMarks[i] / 90) * sizeW
         local length = (math.abs(rollMarks[i]) == 90) and 3 or 2
         lcd.drawLine(x, top + 1, x, top + length, SOLID, FORCE)
     end
-    local rollX = cx + math.sin(rollRad) * sizeW
+    local rollX = cx + (math.max(-90, math.min(90, roll)) / 90) * sizeW
     lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
 
     local pitchMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #pitchMarks do
-        local y = cy - math.sin(pitchMarks[i] * 0.01745329252) * sizeH
+        local y = cy - (pitchMarks[i] / 90) * sizeH
         local length = (math.abs(pitchMarks[i]) == 90) and 3 or 2
         lcd.drawLine(left + 1, y, left + length, y, SOLID, FORCE)
     end
-    local pitchY = cy - math.sin(pitchRad) * sizeH
+    local pitchY = cy - (math.max(-90, math.min(90, pitch)) / 90) * sizeH
     lcd.drawLine(left + 2, pitchY - 1, left + 2, pitchY + 1, SOLID, FORCE)
 end
 
