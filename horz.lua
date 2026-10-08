@@ -47,8 +47,8 @@ local catalog = {
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
     { "Ptch", "%.0f", 1, "°" }, { "Roll", "%.0f", 1, "°" }, 
     { "AccX", "%.2f", 1, "g" }, { "AccY", "%.2f", 1, "g" },
-    { "AccZ", "%.2f", 1, "g" }, { "GAlt", "%.1f", 1, "m" },
-    { "Sats", "%.0f", 1, "" }, { "GFix", "%.0f", 1, "" },
+    { "AccZ", "%.2f", 1, "g" }, { "GAlt", "%.0f", 1, "m" },
+    { "Sats", "%.0f", 1, "" }, { "Gfix", "%.0f", 1, "" },
     { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
       
 }
@@ -61,7 +61,7 @@ local headingLabels = {
     [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
     [180] = "S", [225] = "SW", [270] = "W", [315] = "NW"
 }
-local allowedChars = " AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZz0123456789-+_.:*()&$"  --leezeichen am Anfang ist für null-Abstand
+local allowedChars = " aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*()"  --leezeichen am Anfang ist für null-Abstand
 
 local function trim(str)
     if not str then return "" end
@@ -151,7 +151,7 @@ local function loadConfig()
                         if source and validText(source, 4) then
                             insideSource, insideEnabled = source, tonumber(enabled)
                         end
-                    elseif key == "ALTIMETER" and validText(value, 4) then
+                    elseif key == "ALTIMETER-SCALE" and validText(value, 4) then
                         altimeterSource = value
                     elseif key == "AXES" then
                         local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
@@ -190,7 +190,7 @@ local function saveConfig()
     io.write(f, "GROUND=" .. groundMode .. "\n")
     io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
     io.write(f, "INSIDE=" .. insideSource .. "," .. insideEnabled .. "\n")
-    io.write(f, "ALTIMETER=" .. trim(altimeterSource) .. "\n")
+    io.write(f, "ALTIMETER-SCALE=" .. trim(altimeterSource) .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
     for i = 1, 9 do
         io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
@@ -342,7 +342,7 @@ local function handleMenu(event)
 
     if menuPage == 4 and axisEditing and selectedRow <= 3 and (negative or positive) then
         if cycleAxis(selectedRow, positive and 1 or -1) then
-            axisMessage = "Achsen getauscht"
+            axisMessage = "Axes changed"
         else
             axisMessage = ""
         end
@@ -428,7 +428,7 @@ local function calibrate(event)
     if calibrationStep == 1 and event == EVT_ENTER_BREAK then
         local magnitude = vectorMagnitude(values)
         if magnitude < 0.001 then
-            calibrationMessage = "Acc-Signal fehlt"
+            calibrationMessage = "no Acc-Signal"
             return
         end
         local index = 1
@@ -438,18 +438,18 @@ local function calibrate(event)
         downAxis = axis .. ((values[index] >= 0) and "+" or "-")
         calibrationLevel = { values = values, down = index, magnitude = magnitude }
         calibrationStep = 2
-        calibrationMessage = "Level erfasst"
+        calibrationMessage = "Level set"
     elseif calibrationStep == 2 and (event == EVT_ENTER_BREAK) then
         local remain = {}
         for i = 1, 3 do if i ~= calibrationLevel.down then remain[#remain + 1] = i end end
         local magnitude = vectorMagnitude(values)
         local tilt = math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2)
         if magnitude < calibrationLevel.magnitude * 0.5 then
-            calibrationMessage = "Acc-Signal fehlt"
+            calibrationMessage = "no Acc-Signal"
             return
         end
         if tilt < magnitude * 0.15 then
-            calibrationMessage = "Nase staerker neigen"
+            calibrationMessage = "turn nose more"
             return
         end
         local forward = (math.abs(values[remain[1]]) >= math.abs(values[remain[2]])) and remain[1] or remain[2]
@@ -469,7 +469,7 @@ local function calibrate(event)
         sideAxis = ({ "X", "Y", "Z" })[other] .. ((sideSign > 0) and "+" or "-")
         calibrationStep = 0
         calibrationLevel = nil
-        calibrationMessage = "Kalibrierung OK"
+        calibrationMessage = "Calibration OK"
         saveConfig()
     end
 end
@@ -492,11 +492,11 @@ local function drawMenu(event)
     lcd.drawText(1, 1, heading, INVERS + SMLSIZE)
     if calibrationStep > 0 then
         local values = vectorValues()
-        lcd.drawText(1, 13, calibrationStep == 1 and "Modell waagrecht halten" or "Nase nach unten halten", 0)
+        lcd.drawText(1, 13, calibrationStep == 1 and "hold Model straigt" or "turn nose down", 0)
         lcd.drawText(1, 24, string.format("X:%.1f Y:%.1f Z:%.1f",
             tonumber(values[1]) or 0, tonumber(values[2]) or 0, tonumber(values[3]) or 0), SMLSIZE)
         lcd.drawText(1, 36, calibrationMessage, INVERS)
-        lcd.drawText(1, 50, "ENTER: messen EXIT: Ende", SMLSIZE)
+        lcd.drawText(1, 50, "ENTER: measure EXIT: end", SMLSIZE)
         return
     end
     if menuPage == 1 then
@@ -567,7 +567,7 @@ local function drawMenu(event)
             local altimeterSelected = selectedRow == 6
             local altimeterValue = (altimeterSelected and editField == 5) and
                 editDisplay(altimeterSource, 4) or ("[" .. altimeterSource .. "]")
-            lcd.drawText(9, 50, "ALTIMETER:", SMLSIZE +
+            lcd.drawText(9, 50, "ALTIMETER-SCALE:", SMLSIZE +
                 ((altimeterSelected and editField == 0) and INVERS or 0))
             lcd.drawText(127, 50, altimeterValue, RIGHT + SMLSIZE +
                 ((altimeterSelected and editField == 5) and INVERS or 0))
@@ -774,7 +774,7 @@ local function run(event)
     local headingDiff = ((rawHdg - filteredHdg + 180) % 360) - 180
     filteredHdg = (filteredHdg + headingDiff * 0.3) % 360
     local hdg = math.floor(filteredHdg + 0.5) % 360
-    local fix = math.max(0, math.min(3, math.floor(tonumber(getValue("GFix")) or 0)))
+    local fix = math.max(0, math.min(3, math.floor(tonumber(getValue("Gfix")) or 0)))
     local gpsLat, gpsLon = gpsCoordinates()
     -- Home wird beim ersten gueltigen 3D-Fix nach Lua-Start gesetzt.
     if fix == 3 and not homeLat and gpsLat and gpsLon then
