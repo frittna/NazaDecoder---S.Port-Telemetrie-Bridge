@@ -1,7 +1,9 @@
-// NazaDecoder - S.Port Telemetrie Bridge                                                   @frittna 7.Okt.2026
-// Naza-M V1/V2 to FrSky SmartPort - Arduino + MPU6000/MPU6050 Gyro-Chip
-// Lagewerte als gefilterter Gravitationsvektor; Heading kommt weiterhin von der Naza.
-// Eigenständiger Sketch; nicht zusammen mit der Basis-Skizze kompilieren.
+// NazaDecoder - S.Port Telemetrie Bridge                                        @frittna 8.Okt.2026
+// Naza-M V1/V2 to FrSky SmartPort - Arduino 
+// integriert die GPS Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
+// Version mit zusätzlichem MPU6000/6050 Gyro-Chip für Lageposition
+// --> Das LUA Script ist entsanden mit dem Projekt https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge
+
 
 #include <Arduino.h>
 #include <Wire.h>
