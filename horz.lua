@@ -591,8 +591,8 @@ local function drawMenu(event)
         lcd.drawText(86, line(5), "[" .. graphSeconds .. "]",
             (selectedRow == 7 and editField == 6) and INVERS or 0)
         lcd.drawText(86 + (#tostring(graphSeconds) + 2) * 6, line(5), "s", 0)
-        lcd.drawText(1, 49, "For Graph just one Sensor may", SMLSIZE)
-        lcd.drawText(1, 54, "be aktive on left side.", SMLSIZE)
+        lcd.drawText(0, 49, "For Graph just 1 Sensor may", SMLSIZE)
+        lcd.drawText(0, 57, "be active on the left", SMLSIZE)
     elseif menuPage == 2 or menuPage == 3 then
         local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
         for i = first, last do
@@ -617,9 +617,9 @@ local function drawMenu(event)
                 else unitText = editDisplay(unit, 3) end
             end
             lcd.drawText(9, y, nameText, (selected and editField == 1) and INVERS or 0)
-            lcd.drawText(35, y, ":", 0)
-            lcd.drawText(41, y, sourceText, (selected and editField == 2) and INVERS or 0)
-            lcd.drawText(72, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
+            lcd.drawText(37, y, ":", 0)
+            lcd.drawText(45, y, sourceText, (selected and editField == 2) and INVERS or 0)
+            lcd.drawText(78, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
         end
         if menuPage == 3 then
             local sourceRowY, enabledRowY = 34, 42
@@ -1013,8 +1013,10 @@ local function drawLeftColumn()
             local name, value = text(k)
             local y = 1 + (k - 1) * 21
             local limit = (k == 1) and 33 or 43
-            lcd.drawText(1, y, name .. ":", pickFont(name .. ":", limit, FONTS_NORMAL))
-            lcd.drawText(1, y + 9, value, pickFont(value, limit, FONTS_NORMAL))
+            -- eine gemeinsame Schrift pro Block (nach dem breiteren Text)
+            local font = pickFont((#value > #name + 1) and value or (name .. ":"), limit, FONTS_NORMAL)
+            lcd.drawText(1, y, name .. ":", font)
+            lcd.drawText(1, y + 9, value, font)
         end
     elseif n == 2 then
         -- 2 Sensoren: Name und Wert ganz gross (MIDSIZE), erster Name im GPS-Bereich begrenzt
