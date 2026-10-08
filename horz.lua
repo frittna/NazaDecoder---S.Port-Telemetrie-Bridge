@@ -22,6 +22,7 @@ local configLoaded = false
 local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
 -- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
 local CONFIG_READ_LIMIT = 1024
+local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
@@ -732,7 +733,7 @@ end
 
 local function drawHomePointer(bearing, heading, cx, topY, sizeW)
     local delta = ((bearing - heading + 180) % 360) - 180
-    local visibleLimit = sizeW / 0.75
+    local visibleLimit = (sizeW - 1) / 0.75
     local function drawFilledSideArrow(x, direction)
         for row = -3, 3 do
             local inset = math.abs(row)
@@ -958,11 +959,12 @@ local function run(event)
     end
     if trim(altimeterSource) ~= "" then
         local alt = readSlot(trim(altimeterSource), "")
-        local metersPerPixel = 5 / sizeH
-        local halfStep = math.floor(alt / 2.5)
+        -- Eine halbe Boxhoehe entspricht 5 m; kleine Striche liegen bei 2,5-m-Schritten.
+        local metersPerPixel = ALTITUDE_METERS_PER_HALFBOX / sizeH
+        local halfStep = math.floor(alt / ALTITUDE_TICK_METERS)
         for tick = -4, 4 do
             local level = halfStep + tick
-            local tickAltitude = level * 2.5
+            local tickAltitude = level * ALTITUDE_TICK_METERS
             local y = math.floor(cy + (tickAltitude - alt) / metersPerPixel + 0.5)
             if y >= cy - sizeH + 2 and y <= cy + sizeH - 2 then
                 local length = (level % 2 == 0) and 5 or 3
