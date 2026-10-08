@@ -24,6 +24,7 @@ local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
 local CONFIG_READ_LIMIT = 1024
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 local EARTH_MEAN_DIAMETER_METERS = 12742000
+local HOME_MIN_DISTANCE_METERS, COMPASS_PIXELS_PER_DEGREE = 5, 0.75
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
@@ -722,7 +723,7 @@ local function homeDirection(lat, lon)
     local a = sinLat * sinLat + math.cos(lat1) * math.cos(lat2) * sinLon * sinLon
     a = math.max(0, math.min(1, a))
     local distance = EARTH_MEAN_DIAMETER_METERS * atan2(math.sqrt(a), math.sqrt(1 - a))
-    if distance <= 5 then return nil, distance end
+    if distance <= HOME_MIN_DISTANCE_METERS then return nil, distance end
 
     local homeLonDelta = (homeLon - lon) * toRadians
     local bearingY = math.sin(homeLonDelta) * math.cos(lat1)
@@ -734,7 +735,7 @@ end
 
 local function drawHomePointer(bearing, heading, cx, topY, sizeW)
     local delta = ((bearing - heading + 180) % 360) - 180
-    local visibleLimit = (sizeW - 1) / 0.75
+    local visibleLimit = (sizeW - 1) / COMPASS_PIXELS_PER_DEGREE
     local function drawFilledSideArrow(x, direction)
         for row = -3, 3 do
             local inset = math.abs(row)
@@ -752,7 +753,7 @@ local function drawHomePointer(bearing, heading, cx, topY, sizeW)
         local x = cx + sizeW - 1
         drawFilledSideArrow(x, "right")
     else
-        local x = math.floor(cx + delta * 0.75 + 0.5)
+        local x = math.floor(cx + delta * COMPASS_PIXELS_PER_DEGREE + 0.5)
         for row = 0, 3 do
             local halfWidth = row
             lcd.drawLine(x - halfWidth, topY - 1 + row, x + halfWidth, topY - 1 + row, SOLID, FORCE)
@@ -1001,7 +1002,7 @@ local function run(event)
         local angle = (math.floor(hdg / 5) + i) * 5
         local normalized = math.floor((angle % 360 + 360) % 360)
         local diff = ((angle - hdg + 180) % 360) - 180
-        local x = cx + diff * 0.75
+        local x = cx + diff * COMPASS_PIXELS_PER_DEGREE
         if x >= cx - sizeW and x <= cx + sizeW then
             lcd.drawLine(x, yBottom - 2, x, yBottom, SOLID, FORCE)
             if normalized % 45 == 0 then
