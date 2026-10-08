@@ -25,12 +25,20 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 - Wenn jemand wie ich dieses umprogrammierte S-ODS Modul verwendet, nicht das GPS wie sonst vorgesehen durch das Modul schleifen. Die Pins des "to GPS" und "to LED" vom Bild des Moduls sind nicht 1:1 durchverbunden.
 - Es muss also vom GPS-Kabel eine einfache Anzapfung für TX und GND gemacht werden, oder viel schöner ist einen Passthrough Stecker aus den ausgelöteten Stecker und Pins basteln die man alle nicht mehr braucht.
 - OPTIONAL: ich einen 3.3V zu 5V Pegelwandler für das serielle GPS-TX-Signal(3.3V) zum Arduino(5V) eingebaut. Also 3.3V aus kleinem Fix-Regler und 5V in den Levelshifter, dessen LV1 zu GPS(TX) und HV1 zu PD7(Pin30).
+- #######################################################################################################
 - OPTIONAL: MPU-6000-Sketch `NazaSmartPort_Gyro_v1_Arduino_328P.ino` als eigenständigen Sketch öffnen.
 - dazu passt dann mein LUA Skript horz.lua (auf einer Frsky Taranis QX7 mit S/W-Display und Edge-TX 2.11)
+- #######################################################################################################
 
-### LUA Anleitung - Lageanzeige und Telemetie Display Skript - für SmartPort Sender wie Taranis QX9 EdgeTX @ 2.11.7 (und kompatible)
+### Programmierung des Ardiono bei Atmega328P
+- Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
+- ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
+- Der Atmega283P hat nur EINE serielle Schnittstelle, aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
+
+
+
+### LUA Script Anleitung - Lageanzeige und Telemetie Display Skript - für SmartPort Sender wie Taranis QX9 EdgeTX @ 2.11.7 (und kompatible)
 --
-
 `horz.lua` bietet im Menü die Quellen `ANGLES` (Empfängerwerte `Ptch`/`Roll`) und `VECTOR` (normierte `AccX/Y/Z`). Im Vektormodus sind `fwd`, `side` und `down` samt Vorzeichen einstellbar; `Calibrate` ermittelt zuerst die Schwerkraftachse und danach durch Nase-abwärts-Neigen die Vorwärtsachse.
 
 Für den seitlich montierten Archer passen als Startwert `fwd=X+`, `side=Z-`, `down=Y+`: Nase abwärts ergibt `AccX+`, rechts unten `AccZ+`, und unten ist `AccY+`. 
@@ -50,39 +58,32 @@ Der Home-Pfeil wird beim ersten gültigen 3D-Fix nach Lua-Start aus der GPS-Posi
 
 Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
-
-### Programmierung des Ardiono bei Atmega328P
-- Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
-- ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
-- Der Atmega283P hat nur EINE serielle Schnittstelle, aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
-
-
 ![](Case_compl.jpg)
 
 
 
 -3D view:
 
-![](\DOKU\Lua_Screen1.png) 
+![](DOKU/Lua_Screen1.png) 
 
 -Classic view
 
-![](\DOKU\Lua_Screen9.png)
+![](DOKU/Lua_Screen9.png)
 
 -Menu pages (Settings)
 
-![](\DOKU\Lua_Screen2.png)
+![](DOKU/Lua_Screen2.png)
 
-![](\DOKU\Lua_Screen3.png)
+![](DOKU/Lua_Screen3.png)
 
-![](\DOKU\Lua_Screen4.png)
+![](DOKU/Lua_Screen4.png)
 
-![](\DOKU\Lua_Screen5.png)
+![](DOKU/Lua_Screen5.png)
 
-![](\DOKU\Lua_Screen6.png)
+![](DOKU/Lua_Screen6.png)
 
-![](\DOKU\Lua_Screen7.png)
+![](DOKU/Lua_Screen7.png)
 
-![](\DOKU\Lua_Screen8.png)
+![](DOKU/Lua_Screen8.png)
 
 
