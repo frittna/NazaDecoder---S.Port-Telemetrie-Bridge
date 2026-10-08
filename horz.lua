@@ -215,10 +215,10 @@ local function slotIndex()
 end
 
 local function menuContentRows()
-    if menuPage == 1 then return 7 end
+    if menuPage == 1 then return 6 end
     if menuPage == 2 then return 6 end
     if menuPage == 3 then return 6 end
-    return 4
+    return 5
 end
 
 local function menuRows()
@@ -290,9 +290,24 @@ local function handleMenu(event)
             end
             return true
         end
+        if menuPage == 3 and selectedRow == 6 and editField == 5 then
+            if negative or positive then
+                altimeterSource = trim(changeChar(padStr(altimeterSource, 4), editCharIdx,
+                    negative and -1 or 1))
+            elseif event == EVT_ENTER_BREAK then
+                editCharIdx = editCharIdx + 1
+                if editCharIdx > 4 then editField = 0; saveConfig() end
+            elseif event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
+                editField = 0
+                saveConfig()
+            end
+            return true
+        end
         local text, maxLen, target
         if menuPage == 1 then
-            target = (selectedRow == 3) and "pitch" or "roll"
+            if selectedRow == 2 then target = "pitch"
+            elseif selectedRow == 3 then target = "roll"
+            end
             text = (target == "pitch") and pitchSource or rollSource
             maxLen = 4
         elseif menuPage == 3 and selectedRow == 6 and editField == 5 then
@@ -360,13 +375,12 @@ local function handleMenu(event)
             nextMenuPage()
         elseif menuPage == 1 then
             if selectedRow == 1 then groundMode = (groundMode + 1) % 3
-            elseif selectedRow == 2 then attitudeMode = (attitudeMode == 1) and 2 or 1
-            elseif selectedRow == 3 or selectedRow == 4 then editField = 1; editCharIdx = 1
-            elseif selectedRow == 5 then invPitch = 1 - invPitch
-            elseif selectedRow == 6 then invRoll = 1 - invRoll
-            elseif selectedRow == 7 then invHdg = 1 - invHdg
+            elseif selectedRow == 2 or selectedRow == 3 then editField = 1; editCharIdx = 1
+            elseif selectedRow == 4 then invPitch = 1 - invPitch
+            elseif selectedRow == 5 then invRoll = 1 - invRoll
+            elseif selectedRow == 6 then invHdg = 1 - invHdg
             end
-            if selectedRow <= 2 or selectedRow >= 5 then saveConfig() end
+            if selectedRow == 1 or selectedRow >= 4 then saveConfig() end
         elseif menuPage == 2 or menuPage == 3 then
             if menuPage == 3 and selectedRow == 4 then
                 editField = 4
@@ -381,7 +395,10 @@ local function handleMenu(event)
                 editCharIdx = 1
             end
         elseif menuPage == 4 then
-            if selectedRow <= 3 then
+            if selectedRow == 5 then
+                attitudeMode = (attitudeMode == 1) and 2 or 1
+                saveConfig()
+            elseif selectedRow <= 3 then
                 if axisEditing then
                     local axis = (selectedRow == 1 and fwdAxis) or (selectedRow == 2 and sideAxis) or downAxis
                     local value = string.sub(axis, 1, 1) ..
@@ -485,7 +502,7 @@ end
 local function drawMenu(event)
     local titles = {
         "--CONFIG PAGE--", "--SENSOR PAGE 1--",
-        "--SENSOR PAGE 2--", "--AXIS MAPPING--"
+        "--SENSOR PAGE 2--", "--AXIS SETTING--"
     }
     local heading = configSaveFailed and "SAVE FAILED" or
         (configLoadWarning and "OLD CFG: DEFAULTS" or titles[menuPage])
@@ -502,21 +519,20 @@ local function drawMenu(event)
     if menuPage == 1 then
         local rows = {
             { "Ground:", ({ "White", "Lines", "Points" })[groundMode + 1] },
-            { "Attitude:", (attitudeMode == 1) and "ANGLES" or "VECTOR" },
             { "Pitch src:", pitchSource }, { "Roll src:", rollSource },
             { "Pitch inv:", (invPitch == 1) and "YES" or "-" },
             { "Roll inv:", (invRoll == 1) and "YES" or "-" },
             { "Hdg inv:", (invHdg == 1) and "YES" or "-" }
         }
         for i = 1, #rows do
-            local y = 9 + (i - 1) * 7
+            local y = 9 + (i - 1) * 8
             local selected = i == selectedRow
             lcd.drawText(1, y, " ", 0)
             lcd.drawText(8, y, rows[i][1], selected and editField == 0 and INVERS or 0)
             local value = rows[i][2]
-            local valueX = (i == 3 or i == 4) and 77 or 73
-            if editField > 0 and (i == 3 or i == 4) then
-                local source = (i == 3) and pitchSource or rollSource
+            local valueX = (i == 2 or i == 3) and 77 or 73
+            if editField > 0 and (i == 2 or i == 3) then
+                local source = (i == 2) and pitchSource or rollSource
                 lcd.drawText(valueX, y, editDisplay(source, 4), INVERS + SMLSIZE)
             else
                 lcd.drawText(valueX, y, value, 0)
@@ -554,28 +570,26 @@ local function drawMenu(event)
             local sourceSelected = selectedRow == 4
             local enabledSelected = selectedRow == 5
             lcd.drawText(1, sourceRowY, sourceSelected and ">" or " ", sourceSelected and INVERS or 0)
-            lcd.drawText(9, sourceRowY, "Inside Horizon",
+            lcd.drawText(9, sourceRowY, "inside Horizon",
                 (sourceSelected and editField == 0) and INVERS or 0)
             lcd.drawText(127, sourceRowY, "[" .. insideSource .. "]",
                 RIGHT + ((sourceSelected and editField == 4) and INVERS or 0))
             lcd.drawText(1, enabledRowY, enabledSelected and ">" or " ",
                 enabledSelected and INVERS or 0)
-            lcd.drawText(9, enabledRowY, "show it:",
-                (enabledSelected and editField == 0) and INVERS or 0)
-            lcd.drawText(127, enabledRowY, (insideEnabled == 1) and "[X]" or "[ ]",
+            lcd.drawText(127, enabledRowY,
+                (insideEnabled == 1) and "is visible?: [X]" or "is visible?: [ ]",
                 RIGHT + ((enabledSelected and editField == 0) and INVERS or 0))
             local altimeterSelected = selectedRow == 6
-            local altimeterValue = (altimeterSelected and editField == 5) and
-                editDisplay(altimeterSource, 4) or ("[" .. altimeterSource .. "]")
-            lcd.drawText(9, 50, "ALTIMETER-SCALE:", SMLSIZE +
+            lcd.drawText(8, 50, "Altimeter-Scale:",
                 ((altimeterSelected and editField == 0) and INVERS or 0))
-            lcd.drawText(127, 50, altimeterValue, RIGHT + SMLSIZE +
+            lcd.drawText(104, 50, padStr(trim(altimeterSource), 4),
                 ((altimeterSelected and editField == 5) and INVERS or 0))
         end
     else
         local rows = {
-            "Fwd : " .. fwdAxis, "Side: " .. sideAxis,
-            "Down: " .. downAxis, "Calibrate"
+            "Forward: " .. fwdAxis, "Side: " .. sideAxis,
+            "Down: " .. downAxis, "Calibrate Attitude",
+            "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR")
         }
         for i = 1, #rows do
             local y = 10 + (i - 1) * 8
@@ -589,8 +603,8 @@ local function drawMenu(event)
         end
     end
     local scrollSelected = selectedRow > menuContentRows()
-    lcd.drawText(1, 56, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
-    lcd.drawText(127, 56, "[scroll]", SMLSIZE + RIGHT +
+    lcd.drawText(1, 58, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
+    lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
         (scrollSelected and INVERS or 0))
 end
 
