@@ -58,7 +58,7 @@ Der Home-Pfeil wird beim ersten gültigen 3D-Fix nach Lua-Start aus der GPS-Posi
 
 Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
-![](Case_compl.jpg)
+![](DOKU/Case_compl.jpg)
 
 
 
