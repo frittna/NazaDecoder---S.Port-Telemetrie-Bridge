@@ -1,9 +1,7 @@
-# NazaDecoder - S.Port Telemetrie Bridge
-
-## Naza-M V1/V2 to FrSky SmartPort - Arduino
+## Naza-M V1/V2 to FrSky SmartPort Telemetrie Bridge - Arduino
 -  source code: [frittna/NazaDecoder---S.Port-Telemetrie-Bridge](https://github.com/frittna/NazaDecoder---S.Port-Telemetrie-Bridge)  @ 2.Okt.2026 
   
--> integriert die GPS- und Magn.-Daten vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
+-> integriert alle GPS- und das Heading vom DJI Naza-M V1/V2 in den FrSky SmartPort Telemetrie-Datenkanal S.Port.
 
 -> verwendet NazaDecoder Bibliothek [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) und FrSkySportTelemetry Bibiliothek [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
 
@@ -30,13 +28,19 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 - OPTIONAL: MPU-6000-Sketch `NazaSmartPort_Gyro_v1_Arduino_328P.ino` als eigenständigen Sketch öffnen.
 - dazu passt dann mein LUA Skript horz.lua (auf einer Frsky Taranis QX7 mit S/W-Display und Edge-TX 2.11)
 
-### Lageanzeige
+### LUA Anleitung - Lageanzeige und Telemetie Display Skript - für SmartPort Sender wie Taranis QX9 EdgeTX @ 2.11.7 (und kompatible)
+--
 
-`horz.lua` bietet die Quellen `ANGLES` (Empfängerwerte `Ptch`/`Roll`) und `VECTOR` (normierte `AccX/Y/Z`). Im Vektormodus sind `fwd`, `side` und `down` samt Vorzeichen einstellbar; `Calibrate` ermittelt zuerst die Schwerkraftachse und danach durch Nase-abwärts-Neigen die Vorwärtsachse. Für den seitlich montierten Archer passen als Startwert `fwd=X+`, `side=Z-`, `down=Y+`: Nase abwärts ergibt `AccX+`, rechts unten `AccZ+`, und unten ist `AccY+`. Bei Verwendung des Gyro-Arduino-Sketches diese Lua-Achsen im Menü auf `fwd=X+`, `side=Y+`, `down=Z-` einstellen; das ist nicht die Archer-Voreinstellung. Pitch/Roll werden nicht mit Rohachsen vermischt; Heading bleibt `Hdg` von der Naza.
+`horz.lua` bietet im Menü die Quellen `ANGLES` (Empfängerwerte `Ptch`/`Roll`) und `VECTOR` (normierte `AccX/Y/Z`). Im Vektormodus sind `fwd`, `side` und `down` samt Vorzeichen einstellbar; `Calibrate` ermittelt zuerst die Schwerkraftachse und danach durch Nase-abwärts-Neigen die Vorwärtsachse.
+
+Für den seitlich montierten Archer passen als Startwert `fwd=X+`, `side=Z-`, `down=Y+`: Nase abwärts ergibt `AccX+`, rechts unten `AccZ+`, und unten ist `AccY+`. 
+Bei Verwendung des Gyro-Arduino-Sketches diese Lua-Achsen im Menü auf `fwd=X+`, `side=Y+`, `down=Z-` einstellen; das ist nicht die Archer-Voreinstellung. Pitch/Roll werden nicht mit Rohachsen vermischt; Heading bleibt `Hdg` von der Naza.
 
 Im Sensor-Menü schalten `+/-` bei Slot-Quellen durch den Katalog; der Drehgeber bearbeitet einzelne Zeichen.
 Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspringt das aktuelle Feld und führt direkt zum nächsten.
-Auf Sensorseite 2 lässt sich `Altimeter-Scale` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert in beiden Ansichten die 2,5-m-/5-m-Höhenstriche am linken Boxrand. Auf Seite 4 (`Axis Settings`) schaltet `View` standardmäßig auf die kompakte 3D-Lageansicht in derselben Box um; `Attitude` wählt die Lagequelle und `Calibrate` startet die Vektorkalibrierung. In 3D zeigen dezente, beidseitige Skalen 45°-/90°-Lagen; die Kompassleiste und der gefüllte Home-Pfeil bleiben erhalten. `View` kann jederzeit auf die bisherige Horizontansicht zurückgestellt werden. Der 3D-Modus funktioniert auch mit den korrigierten `Ptch`/`Roll`-Werten (`ANGLES`); Rohwerte aller drei Beschleunigungsachsen werden nur im `VECTOR`-Modus benötigt.
+
+Auf Sensorseite 2 lässt sich `Altimeter-Scale` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert in beiden Ansichten die 2,5-m-/5-m-Höhenstriche am linken Boxrand. Auf Seite 4 (`Axis Settings`) schaltet `View` standardmäßig auf die kompakte 3D-Lageansicht in derselben Box um; `Attitude` wählt die Lagequelle und `Calibrate` startet die Vektorkalibrierung.
+3D-View zeigt dezente, beidseitige Skalen 45°-/90°-Lagen; die Kompassleiste und der gefüllte Home-Pfeil bleiben erhalten. `View` kann jederzeit auf die bisherige Horizontansicht zurückgestellt werden. Der 3D-Modus funktioniert auch mit den korrigierten `Ptch`/`Roll`-Werten (`ANGLES`); Rohwerte aller drei Beschleunigungsachsen werden nur im `VECTOR`-Modus benötigt.
 
 Die Anzeige in der Horizontmitte lässt sich auf Menüseite 3 unter `inside Horizon` auf einen Katalogsensor umstellen und mit `is visible?` abschalten. Standardmäßig ist sie aktiv und zeigt `Alt`.
 
@@ -46,7 +50,8 @@ Der Home-Pfeil wird beim ersten gültigen 3D-Fix nach Lua-Start aus der GPS-Posi
 
 Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
-### Programmierung bei 328P
+
+### Programmierung des Ardiono bei Atmega328P
 - Arduino IDE: Werkzeuge -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16Mhz 5V -> Programmer -> STK 500 dev. -> Sketch -> Programmer upload (Strg+Shift+U)
 - ÜBER ISP-KABEL AM ISP ANSCHLUSS -> BOOT BUTTON AM MODUL WÄHREND FLASHEN FEST GEDRÜCKT HALTEN.
 - Der Atmega283P hat nur EINE serielle Schnittstelle, aktives GPS und serieller Monitor zum testen gleichzeitig nicht möglich.
@@ -54,9 +59,17 @@ Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er 
 
 ![](Case_compl.jpg)
 
---Settings:
 
-![](Lua_Screen1.png)
+
+-3D view:
+
+![](Lua_Screen1.png) 
+
+-Classic view
+
+![](Lua_Screen9.png)
+
+-Menu pages (Settings)
 
 ![](Lua_Screen2.png)
 
@@ -71,3 +84,5 @@ Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er 
 ![](Lua_Screen7.png)
 
 ![](Lua_Screen8.png)
+
+
