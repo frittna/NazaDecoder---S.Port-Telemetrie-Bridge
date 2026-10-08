@@ -584,13 +584,15 @@ local function drawMenu(event)
             end
             checkbox(y, ((k == 0) and invPitch or invRoll) == 1, selectedRow == item + 1)
         end
-        lcd.drawText(8, line(4), "Hdg inv:", (selectedRow == 6) and INVERS or 0)
-        lcd.drawText(73, line(4), (invHdg == 1) and "YES" or "-", 0)
+        lcd.drawText(8, line(4), "Heading:", 0)
+        checkbox(line(4), invHdg == 1, selectedRow == 6)
         lcd.drawText(8, line(5), "Graph X-Time:",
             (selectedRow == 7 and editField == 0) and INVERS or 0)
         lcd.drawText(86, line(5), "[" .. graphSeconds .. "]",
             (selectedRow == 7 and editField == 6) and INVERS or 0)
         lcd.drawText(86 + (#tostring(graphSeconds) + 2) * 6, line(5), "s", 0)
+        lcd.drawText(1, 49, "For Graph just one Sensor may", SMLSIZE)
+        lcd.drawText(1, 54, "be aktive on left side.", SMLSIZE)
     elseif menuPage == 2 or menuPage == 3 then
         local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
         for i = first, last do
@@ -953,6 +955,16 @@ local function drawName(x, y, name, limit)
     end
 end
 
+-- Wert immer MIDSIZE, Einheit klein dahinter; nur wenn es nicht passt: Fallback nach Breite
+local function drawBigValue(x, y, both, value, unit, limit)
+    if #value * 8 + #unit * 5 <= limit then
+        lcd.drawText(x, y, value, MIDSIZE)
+        if unit ~= "" then lcd.drawText(x + #value * 8 + 1, y + 7, unit, SMLSIZE) end
+    else
+        lcd.drawText(x, y, both, pickFont(both, limit, FONTS_BIG))
+    end
+end
+
 local function drawSparkline(x0, y0, x1, y1)
     local lo, hi = sparkBuf[1], sparkBuf[1]
     for i = 2, sparkCount do
@@ -986,7 +998,8 @@ local function drawLeftColumn()
     local function text(k)
         local i = leftActive[k]
         return string.sub(trim(sName[i]), 1, 4),
-            string.format(slotFormats[i], slotValues[i]) .. trim(sUnit[i])
+            string.format(slotFormats[i], slotValues[i]) .. trim(sUnit[i]),
+            string.format(slotFormats[i], slotValues[i]), trim(sUnit[i])
     end
     if n >= 4 then
         local step = (n == 6) and 11 or math.floor(55 / (n - 1))
@@ -1006,17 +1019,17 @@ local function drawLeftColumn()
     elseif n == 2 then
         -- 2 Sensoren: Name und Wert ganz gross (MIDSIZE), erster Name im GPS-Bereich begrenzt
         for k = 1, 2 do
-            local name, value = text(k)
+            local name, both, value, unit = text(k)
             local y = 2 + (k - 1) * 32
             drawName(1, y, name, (k == 1) and 33 or 43)
-            lcd.drawText(1, y + 14, value, pickFont(value, 43, FONTS_BIG))
+            drawBigValue(1, y + 14, both, value, unit, 43)
         end
         lcd.drawLine(0, 31, 40, 31, SOLID, FORCE)
     else
         local i = leftActive[1]
-        local name, value = text(1)
+        local name, both, value, unit = text(1)
         drawName(1, 1, name, 33)
-        lcd.drawText(1, 15, value, pickFont(value, 43, FONTS_BIG))
+        drawBigValue(1, 15, both, value, unit, 43)
         local interval = math.floor(graphSeconds * 100 / SPARK_N)
         if sparkSlot ~= i or sparkSrc ~= sSrc[i] or sparkInterval ~= interval then
             sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
