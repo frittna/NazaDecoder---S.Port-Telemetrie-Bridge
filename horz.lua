@@ -711,7 +711,7 @@ local function gpsCoordinates()
 end
 
 local function homeDirection(lat, lon)
-    if not homeLat or not lat or not lon then return nil, nil end
+    if not homeLat or not homeLon or not lat or not lon then return nil, nil end
     local toRadians = math.pi / 180
     local lat1, lat2 = homeLat * toRadians, lat * toRadians
     local deltaLat = (lat - homeLat) * toRadians
@@ -959,12 +959,14 @@ local function run(event)
     end
     if trim(altimeterSource) ~= "" then
         local alt = readSlot(trim(altimeterSource), "")
-        local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
-        local tickStep = sizeH / 2
+        local metersPerPixel = 5 / sizeH
+        local halfStep = math.floor(alt / 2.5)
         for tick = -4, 4 do
-            local y = math.floor(altTickY + tick * tickStep + 0.5)
+            local level = halfStep + tick
+            local tickAltitude = level * 2.5
+            local y = math.floor(cy + (tickAltitude - alt) / metersPerPixel + 0.5)
             if y >= cy - sizeH + 2 and y <= cy + sizeH - 2 then
-                local length = (tick % 2 == 0) and 5 or 3
+                local length = (level % 2 == 0) and 5 or 3
                 lcd.drawLine(cx - sizeW, y, cx - sizeW + length, y, SOLID, FORCE)
             end
         end
