@@ -1,7 +1,7 @@
 -- Künstlicher Horizont und Telemetrie Sensor Anzeige für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 07.Okt.2026
 
 local invPitch, invRoll, invHdg = 0, 0, 0
-local groundMode, attitudeMode = 0, 1
+local groundMode, attitudeMode, viewMode = 0, 1, 0
 local pitchSource, rollSource = "Ptch", "Roll"
 local insideSource, insideEnabled = "Alt", 1
 local altimeterSource = "Alt"
@@ -82,7 +82,7 @@ end
 
 local function setDefaults()
     invPitch, invRoll, invHdg = 0, 0, 0
-    groundMode, attitudeMode = 0, 1
+    groundMode, attitudeMode, viewMode = 0, 1, 0
     pitchSource, rollSource = "Ptch", "Roll"
     insideSource, insideEnabled = "Alt", 1
     altimeterSource = "Alt"
@@ -131,6 +131,8 @@ local function loadConfig()
                     local key, value = string.match(line, "^([^=]+)=(.*)$")
                     if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
                         attitudeMode = (value == "VECTOR") and 2 or 1
+                    elseif key == "VIEW" and (value == "CLASSIC" or value == "3D") then
+                        viewMode = (value == "3D") and 1 or 0
                     elseif key == "INVERT" then
                         local p, r, h = string.match(value, "^(%d),(%d),(%d)$")
                         if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
@@ -186,6 +188,7 @@ local function saveConfig()
     end
     io.write(f, "HORZCFG=2\n")
     io.write(f, "MODE=" .. ((attitudeMode == 1) and "ANGLES" or "VECTOR") .. "\n")
+    io.write(f, "VIEW=" .. ((viewMode == 1) and "3D" or "CLASSIC") .. "\n")
     io.write(f, "INVERT=" .. invPitch .. "," .. invRoll .. "," .. invHdg .. "\n")
     io.write(f, "GROUND=" .. groundMode .. "\n")
     io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
@@ -218,7 +221,7 @@ local function menuContentRows()
     if menuPage == 1 then return 6 end
     if menuPage == 2 then return 6 end
     if menuPage == 3 then return 6 end
-    return 5
+    return 6
 end
 
 local function menuRows()
@@ -396,8 +399,11 @@ local function handleMenu(event)
                 editCharIdx = 1
             end
         elseif menuPage == 4 then
-            if selectedRow == 5 then
+            if selectedRow == 4 then
                 attitudeMode = (attitudeMode == 1) and 2 or 1
+                saveConfig()
+            elseif selectedRow == 6 then
+                viewMode = 1 - viewMode
                 saveConfig()
             elseif selectedRow <= 3 then
                 if axisEditing then
@@ -413,7 +419,7 @@ local function handleMenu(event)
                     axisEditing = true
                     axisMessage = ""
                 end
-            elseif selectedRow == 4 then
+            elseif selectedRow == 5 then
                 calibrationStep = 1
                 calibrationLevel = nil
                 calibrationMessage = ""
@@ -591,19 +597,22 @@ local function drawMenu(event)
         end
     else
         local rows = {
-            "Forward: " .. fwdAxis, "Side: " .. sideAxis,
-            "Down: " .. downAxis, "Calibrate Attitude",
-            "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR")
+            "Forward: " .. fwdAxis, "Side: " .. sideAxis, "Down: " .. downAxis,
+            "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR"),
+            "Calibrate Attitude", "View: " .. ((viewMode == 1) and "3D" or "Classic")
         }
         for i = 1, #rows do
-            local y = 10 + (i - 1) * 8
+            local y = (i == 6) and 50 or (10 + (i - 1) * 8)
             local selected = i == selectedRow
-            lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
+            lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i],
+                (selected and INVERS or 0) + ((i == 6) and SMLSIZE or 0))
         end
-        if calibrationMessage ~= "" then
-            lcd.drawText(1, 50, calibrationMessage, SMLSIZE)
-        elseif axisMessage ~= "" then
-            lcd.drawText(1, 50, axisMessage, SMLSIZE)
+        if selectedRow ~= 6 then
+            if calibrationMessage ~= "" then
+                lcd.drawText(1, 50, calibrationMessage, SMLSIZE)
+            elseif axisMessage ~= "" then
+                lcd.drawText(1, 50, axisMessage, SMLSIZE)
+            end
         end
     end
     local scrollSelected = selectedRow > menuContentRows()
@@ -759,6 +768,103 @@ local function getAttitude()
     return pitch, roll
 end
 
+local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
+    local left, right = cx - sizeW + 1, cx + sizeW - 1
+    local top, bottom = cy - sizeH + 1, cy + sizeH - 1
+    local focal = sizeW
+    local pitchRad, rollRad = pitch * 0.01745329252, roll * 0.01745329252
+
+    local function planeLine(angle, dotted)
+        local p = angle * 0.01745329252
+        local a = -math.sin(rollRad) * math.cos(p)
+        local b = math.cos(rollRad) * math.cos(p)
+        local c = -focal * math.sin(p)
+        local points = {}
+        local function addPoint(x, y)
+            if x >= left - 0.01 and x <= right + 0.01 and
+                y >= top - 0.01 and y <= bottom + 0.01 then
+                for i = 1, #points do
+                    if math.abs(points[i][1] - x) < 0.1 and math.abs(points[i][2] - y) < 0.1 then
+                        return
+                    end
+                end
+                points[#points + 1] = { x, y }
+            end
+        end
+        if math.abs(b) > 0.0001 then
+            addPoint(left, cy - (a * (left - cx) + c) / b)
+            addPoint(right, cy - (a * (right - cx) + c) / b)
+        end
+        if math.abs(a) > 0.0001 then
+            addPoint(cx - (b * (top - cy) + c) / a, top)
+            addPoint(cx - (b * (bottom - cy) + c) / a, bottom)
+        end
+        if #points < 2 then return end
+
+        local x1, y1, x2, y2 = points[1][1], points[1][2], points[2][1], points[2][2]
+        if dotted then
+            local steps = math.max(math.abs(x2 - x1), math.abs(y2 - y1))
+            if steps < 1 then return end
+            for i = 0, math.floor(steps) do
+                if i % 2 == 0 then
+                    local t = i / steps
+                    lcd.drawPoint(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
+                end
+            end
+        else
+            lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
+        end
+    end
+
+    local a = -math.sin(rollRad) * math.cos(pitchRad)
+    local b = math.cos(rollRad) * math.cos(pitchRad)
+    local c = -focal * math.sin(pitchRad)
+    for y = top, bottom do
+        local row = y - cy
+        local leftGround, rightGround = left, right
+        local centerValue = b * row + c
+        if math.abs(a) > 0.0001 then
+            local cross = cx - centerValue / a
+            if a > 0 then leftGround = math.max(leftGround, math.ceil(cross))
+            else rightGround = math.min(rightGround, math.floor(cross)) end
+        elseif centerValue < 0 then
+            leftGround = rightGround + 1
+        end
+        if leftGround <= rightGround then
+            if groundMode == 1 and y % 2 == 0 then
+                lcd.drawLine(leftGround, y, rightGround, y, SOLID, FORCE)
+            elseif groundMode == 2 then
+                for x = leftGround + ((leftGround + y) % 2), rightGround, 2 do
+                    lcd.drawPoint(x, y)
+                end
+            end
+        end
+    end
+
+    planeLine(pitch, false)
+    planeLine(pitch - 45, true)
+    planeLine(pitch + 45, true)
+
+    -- Dezente 45°- und 90°-Marken mit beweglicher Pitch-/Roll-Anzeige.
+    local rollMarks = { -90, -45, 0, 45, 90 }
+    for i = 1, #rollMarks do
+        local x = cx + math.sin(rollMarks[i] * 0.01745329252) * sizeW
+        local length = (math.abs(rollMarks[i]) == 90) and 3 or 2
+        lcd.drawLine(x, top + 1, x, top + length, SOLID, FORCE)
+    end
+    local rollX = cx + math.sin(rollRad) * sizeW
+    lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
+
+    local pitchMarks = { -90, -45, 0, 45, 90 }
+    for i = 1, #pitchMarks do
+        local y = cy - math.sin(pitchMarks[i] * 0.01745329252) * sizeH
+        local length = (math.abs(pitchMarks[i]) == 90) and 3 or 2
+        lcd.drawLine(left + 1, y, left + length, y, SOLID, FORCE)
+    end
+    local pitchY = cy - math.sin(pitchRad) * sizeH
+    lcd.drawLine(left + 2, pitchY - 1, left + 2, pitchY + 1, SOLID, FORCE)
+end
+
 local function run(event)
     lcd.clear()
     if not configLoaded then loadConfig() end
@@ -801,24 +907,30 @@ local function run(event)
     local homeBearing = homeDirection(gpsLat, gpsLon)
 
     local cx, sizeW, cy, sizeH = 76, 26, 35, 28
-    local pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
-    local rollAngle = roll * 0.01745329252
-    local dx, dy = math.cos(rollAngle) * (sizeW - 1), math.sin(rollAngle) * (sizeW - 1)
-    local isUpsideDown = math.abs(roll) > 90
-    if groundMode > 0 then
-        for y = cy - sizeH + 1, cy + sizeH - 1 do
-            local left, right = cx - sizeW + 1, cx + sizeW - 1
-            if math.abs(dy) > 0.01 then
-                local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
-                if dy > 0 then right = math.min(right, cross)
-                else left = math.max(left, cross) end
-            elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
-                if y <= cy + pitchOffset then left = right + 1 end
-            elseif y >= cy + pitchOffset then left = right + 1 end
-            if left <= right then
-                if groundMode == 1 and y % 2 == 0 then lcd.drawLine(left, y, right, y, SOLID, FORCE)
-                elseif groundMode == 2 then
-                    for x = left + ((left + y) % 2), right, 2 do lcd.drawPoint(x, y) end
+        local pitchOffset, dx, dy
+        if viewMode == 1 then
+            draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
+        else
+            pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
+            local rollAngle = roll * 0.01745329252
+            dx, dy = math.cos(rollAngle) * (sizeW - 1), math.sin(rollAngle) * (sizeW - 1)
+            local isUpsideDown = math.abs(roll) > 90
+            if groundMode > 0 then
+                for y = cy - sizeH + 1, cy + sizeH - 1 do
+                    local left, right = cx - sizeW + 1, cx + sizeW - 1
+                    if math.abs(dy) > 0.01 then
+                        local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
+                        if dy > 0 then right = math.min(right, cross)
+                        else left = math.max(left, cross) end
+                    elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
+                        if y <= cy + pitchOffset then left = right + 1 end
+                    elseif y >= cy + pitchOffset then left = right + 1 end
+                    if left <= right then
+                        if groundMode == 1 and y % 2 == 0 then lcd.drawLine(left, y, right, y, SOLID, FORCE)
+                        elseif groundMode == 2 then
+                            for x = left + ((left + y) % 2), right, 2 do lcd.drawPoint(x, y) end
+                        end
+                    end
                 end
             end
         end
@@ -828,8 +940,10 @@ local function run(event)
     lcd.drawLine(cx + sizeW , cy, cx + sizeW + 4, cy, SOLID, FORCE)
     lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
-    lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
-    if trim(altimeterSource) ~= "" then
+    if viewMode == 0 then
+        lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
+    end
+    if viewMode == 0 and trim(altimeterSource) ~= "" then
         local alt = readSlot(trim(altimeterSource), "")
         local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
         local tickStep = sizeH / 2
