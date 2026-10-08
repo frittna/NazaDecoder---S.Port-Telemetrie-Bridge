@@ -23,6 +23,7 @@ local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
 -- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
 local CONFIG_READ_LIMIT = 1024
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
+local EARTH_MEAN_DIAMETER_METERS = 12742000
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
@@ -720,7 +721,7 @@ local function homeDirection(lat, lon)
     local sinLat, sinLon = math.sin(deltaLat / 2), math.sin(deltaLon / 2)
     local a = sinLat * sinLat + math.cos(lat1) * math.cos(lat2) * sinLon * sinLon
     a = math.max(0, math.min(1, a))
-    local distance = 12742000 * atan2(math.sqrt(a), math.sqrt(1 - a))
+    local distance = EARTH_MEAN_DIAMETER_METERS * atan2(math.sqrt(a), math.sqrt(1 - a))
     if distance <= 5 then return nil, distance end
 
     local homeLonDelta = (homeLon - lon) * toRadians
