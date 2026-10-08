@@ -571,14 +571,14 @@ local function drawMenu(event)
             local sourceSelected = selectedRow == 4
             local enabledSelected = selectedRow == 5
             lcd.drawText(1, sourceRowY, sourceSelected and ">" or " ", sourceSelected and INVERS or 0)
-            lcd.drawText(9, sourceRowY, "inside Horizon",
+            lcd.drawText(9, sourceRowY, "    inside Horizon",
                 (sourceSelected and editField == 0) and INVERS or 0)
-            lcd.drawText(127, sourceRowY, "[" .. insideSource .. "]",
+            lcd.drawText(127, sourceRowY, " " .. insideSource .. " ",
                 RIGHT + ((sourceSelected and editField == 4) and INVERS or 0))
             lcd.drawText(1, enabledRowY, enabledSelected and ">" or " ",
                 enabledSelected and INVERS or 0)
             lcd.drawText(127, enabledRowY,
-                (insideEnabled == 1) and "is visible?: [X]" or "is visible?: [ ]",
+                (insideEnabled == 1) and "is visible?:     [X]  " or "is visible?:     [ ]  ",
                 RIGHT + ((enabledSelected and editField == 0) and INVERS or 0))
             local altimeterSelected = selectedRow == 6
             lcd.drawText(8, 50, "Altimeter-Scale:",
@@ -773,7 +773,7 @@ local function run(event)
             if event == EVT_EXIT_BREAK then
                 calibrationStep = 0
                 calibrationLevel = nil
-                calibrationMessage = "Abgebrochen"
+                calibrationMessage = "Calib. aborted"
             else
                 calibrate(event)
             end
@@ -844,13 +844,13 @@ local function run(event)
     local now = getTime()
     local warningActive = updateGPSWarning(fix, now)
     if fix > 0 then
-        local blinkOn = math.floor(now / 100) % 2 == 0
+        local blinkOn = (now % 80) < 60
         local satsX = cx - sizeW - 7
         if (fix ~= 1 or blinkOn) and (not warningActive or blinkOn) then
-            drawSatellite(satsX - 10, cy - sizeH + 1, fix)
+            drawSatellite(satsX - 8, cy - sizeH - 2, fix)
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX, cy - sizeH + 2, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX + 1 , cy - sizeH + 6, string.format("%.0f", sats), SMLSIZE)
     end
     --lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)  --rausgenommen aus horiz.box, da jetzt mit satelliten symbol gelöst
     if insideEnabled == 1 then
