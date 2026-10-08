@@ -56,6 +56,18 @@ Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er 
 
 --Settings:
 
-![](lua_main_screen.jpg)
+![](Lua_Screen1.png)
 
-![](lua_settings_screens.jpg)
+![](Lua_Screen2.png)
+
+![](Lua_Screen3.png)
+
+![](Lua_Screen4.png)
+
+![](Lua_Screen5.png)
+
+![](Lua_Screen6.png)
+
+![](Lua_Screen7.png)
+
+![](Lua_Screen8.png)
