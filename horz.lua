@@ -732,8 +732,7 @@ end
 
 local function drawHomePointer(bearing, heading, cx, topY, sizeW)
     local delta = ((bearing - heading + 180) % 360) - 180
-    local firstTick = math.floor(heading / 5) * 5 - 30 - heading
-    local lastTick = math.floor(heading / 5) * 5 + 30 - heading
+    local visibleLimit = sizeW / 0.75
     local function drawFilledSideArrow(x, direction)
         for row = -3, 3 do
             local inset = math.abs(row)
@@ -744,10 +743,10 @@ local function drawHomePointer(bearing, heading, cx, topY, sizeW)
             end
         end
     end
-    if delta < firstTick then
+    if delta < -visibleLimit then
         local x = cx - sizeW + 1
         drawFilledSideArrow(x, "left")
-    elseif delta > lastTick then
+    elseif delta > visibleLimit then
         local x = cx + sizeW - 1
         drawFilledSideArrow(x, "right")
     else
