@@ -825,7 +825,7 @@ local function run(event)
     end
     lcd.drawRectangle(cx - sizeW, cy - sizeH, sizeW * 2, sizeH * 2, FORCE)
     lcd.drawLine(cx - sizeW - 5, cy, cx - sizeW - 1, cy, SOLID, FORCE)
-    lcd.drawLine(cx + sizeW + 1, cy, cx + sizeW + 5, cy, SOLID, FORCE)
+    lcd.drawLine(cx + sizeW , cy, cx + sizeW + 4, cy, SOLID, FORCE)
     lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
     lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
