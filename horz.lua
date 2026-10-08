@@ -885,6 +885,96 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     lcd.drawLine(rollX - 1, bottom - 2, rollX + 1, bottom - 2, SOLID, FORCE)
 end
 
+-- Linke Spalte (Slots 1..6): passt sich der Zahl aktiver Slots an
+local leftActive = {}
+local SPARK_N, SPARK_INTERVAL = 40, 50
+local sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc = {}, 0, 0, 0, 0, nil
+
+local function pickFont(text, limit, fonts)
+    local len = #text
+    for _, f in ipairs(fonts) do
+        if len * f[2] <= limit then return f[1] end
+    end
+    return SMLSIZE
+end
+
+local function drawSparkline(x0, y0, x1, y1)
+    local lo, hi = sparkBuf[1], sparkBuf[1]
+    for i = 2, sparkCount do
+        local v = sparkBuf[i]
+        if v < lo then lo = v elseif v > hi then hi = v end
+    end
+    lcd.drawLine(x0, y1, x1, y1, SOLID, FORCE)
+    if sparkCount < 2 then return end
+    local span, h = hi - lo, y1 - y0 - 1
+    local start = (sparkCount < SPARK_N) and 0 or sparkHead
+    local px, py
+    for k = 0, sparkCount - 1 do
+        local v = sparkBuf[((start + k) % SPARK_N) + 1]
+        local y = (span == 0) and (y0 + h / 2) or (y1 - 1 - (v - lo) / span * h)
+        local x = x0 + k
+        if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
+        px, py = x, y
+    end
+end
+
+local function drawLeftColumn()
+    local n = 0
+    for i = 1, 6 do
+        if string.sub(trim(sName[i]), 1, 4) ~= "" then
+            n = n + 1
+            leftActive[n] = i
+        end
+    end
+    if n ~= 1 then sparkCount, sparkHead, sparkSlot = 0, 0, 0 end
+    if n == 0 then return end
+    local function text(k)
+        local i = leftActive[k]
+        return string.sub(trim(sName[i]), 1, 4),
+            string.format(slotFormats[i], slotValues[i]) .. trim(sUnit[i])
+    end
+    if n >= 4 then
+        local step = (n == 6) and 11 or math.floor(55 / (n - 1))
+        for k = 1, n do
+            local name, value = text(k)
+            lcd.drawText(1, 2 + (k - 1) * step, name .. ":" .. value, SMLSIZE)
+        end
+    elseif n == 3 then
+        for k = 1, 3 do
+            local name, value = text(k)
+            local y = 1 + (k - 1) * 21
+            lcd.drawText(1, y, name .. ":", SMLSIZE)
+            lcd.drawText(1, y + 7, value,
+                pickFont(value, (k == 1) and 33 or 43, { { 0, 6 }, { SMLSIZE, 5 } }))
+        end
+    elseif n == 2 then
+        for k = 1, 2 do
+            local name, value = text(k)
+            local y = 2 + (k - 1) * 32
+            lcd.drawText(1, y, name .. ":", SMLSIZE)
+            lcd.drawText(1, y + 8, value,
+                pickFont(value, (k == 1) and 33 or 43, { { MIDSIZE, 8 }, { 0, 6 }, { SMLSIZE, 5 } }))
+        end
+        lcd.drawLine(0, 31, 40, 31, SOLID, FORCE)
+    else
+        local i = leftActive[1]
+        local name, value = text(1)
+        lcd.drawText(1, 2, name .. ":", SMLSIZE)
+        lcd.drawText(1, 10, value, pickFont(value, 33, { { MIDSIZE, 8 }, { 0, 6 }, { SMLSIZE, 5 } }))
+        if sparkSlot ~= i or sparkSrc ~= sSrc[i] then
+            sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc = 0, 0, 0, i, sSrc[i]
+        end
+        local now = getTime()
+        if sparkCount == 0 or now - sparkLast >= SPARK_INTERVAL then
+            sparkLast = now
+            sparkBuf[sparkHead + 1] = slotValues[i]
+            sparkHead = (sparkHead + 1) % SPARK_N
+            if sparkCount < SPARK_N then sparkCount = sparkCount + 1 end
+        end
+        drawSparkline(1, 34, 43, 60)
+    end
+end
+
 local function run(event)
     lcd.clear()
     if not configLoaded then loadConfig() end
@@ -1018,13 +1108,12 @@ local function run(event)
         drawHomePointer(homeBearing, hdg, cx, cy - sizeH, sizeW)
     end
 
-    for i = 1, 9 do
+    drawLeftColumn()
+    for i = 7, 9 do
         local name, unit = string.sub(trim(sName[i]), 1, 4), trim(sUnit[i])
         if name ~= "" then
             local value = string.format(slotFormats[i], slotValues[i])
-            if i <= 6 then
-                lcd.drawText(1, 2 + (i - 1) * 11, name .. ":" .. value .. unit, SMLSIZE)
-            else
+            do
                 local row = i - 7
                 lcd.drawText(127, 1 + row * 17, name .. ":", SMLSIZE + RIGHT)
                 lcd.drawText(127, 9 + row * 17, value .. unit, SMLSIZE + RIGHT)
