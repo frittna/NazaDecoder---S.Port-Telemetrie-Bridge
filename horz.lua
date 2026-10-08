@@ -848,21 +848,23 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     -- Dezente 45°- und 90°-Marken mit beweglicher Pitch-/Roll-Anzeige.
     local rollMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #rollMarks do
-        local x = cx + (rollMarks[i] / 90) * sizeW
-        local length = (math.abs(rollMarks[i]) == 90) and 2 or 1
-        lcd.drawLine(x, top + 2, x, top + 1 + length, SOLID, FORCE)
+        if math.abs(rollMarks[i]) < 90 then
+            local x = cx + (rollMarks[i] / 90) * sizeW
+            lcd.drawLine(x, top + 1, x, top + 2, SOLID, FORCE)
+        end
     end
     local rollX = cx + (math.max(-90, math.min(90, roll)) / 90) * sizeW
-    lcd.drawLine(rollX - 1, top + 3, rollX + 1, top + 3, SOLID, FORCE)
+    lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
 
     local pitchMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #pitchMarks do
-        local y = cy - (pitchMarks[i] / 90) * sizeH
-        local length = (math.abs(pitchMarks[i]) == 90) and 2 or 1
-        lcd.drawLine(left + 2, y, left + 1 + length, y, SOLID, FORCE)
+        if math.abs(pitchMarks[i]) < 90 then
+            local y = cy - (pitchMarks[i] / 90) * sizeH
+            lcd.drawLine(left + 1, y, left + 2, y, SOLID, FORCE)
+        end
     end
     local pitchY = cy - (math.max(-90, math.min(90, pitch)) / 90) * sizeH
-    lcd.drawLine(left + 3, pitchY - 1, left + 3, pitchY + 1, SOLID, FORCE)
+    lcd.drawLine(left + 2, pitchY - 1, left + 2, pitchY + 1, SOLID, FORCE)
 end
 
 local function run(event)
