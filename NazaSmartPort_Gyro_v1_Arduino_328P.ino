@@ -2,8 +2,6 @@
 // Naza-M V1/V2 to FrSky SmartPort - Arduino 
 // integriert alle GPS Daten und Heading des Kompasses von DJI Naza-M V1/V2 -> zu FrSky SmartPort Telemetrie-Datenkanal S.Port.
 //                           Version mit zusätzlichem MPU6000/6050 Gyro-Chip für Lageposition
-// --> Das LUA Script ist entsanden mit dem Projekt https://https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
-
 
 #include <Arduino.h>
 #include <Wire.h>
