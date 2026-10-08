@@ -305,14 +305,13 @@ local function handleMenu(event)
         end
         local text, maxLen, target
         if menuPage == 1 then
-            if selectedRow == 2 then target = "pitch"
-            elseif selectedRow == 3 then target = "roll"
+            if selectedRow == 2 then
+                target, text = "pitch", pitchSource
+            elseif selectedRow == 3 then
+                target, text = "roll", rollSource
+            else
+                return true
             end
-            text = (target == "pitch") and pitchSource or rollSource
-            maxLen = 4
-        elseif menuPage == 3 and selectedRow == 6 and editField == 5 then
-            target = "altimeter"
-            text = altimeterSource
             maxLen = 4
         else
             local slot = slotIndex()
@@ -330,7 +329,9 @@ local function handleMenu(event)
         elseif negative or positive then
             local updated = changeChar(padStr(text, maxLen), editCharIdx, negative and -1 or 1)
             if menuPage == 1 then
-                if target == "pitch" then pitchSource = trim(updated) else rollSource = trim(updated) end
+                if target == "pitch" then pitchSource = trim(updated)
+                elseif target == "roll" then rollSource = trim(updated)
+                end
             elseif target == "altimeter" then altimeterSource = trim(updated)
             elseif target == "name" then sName[slotIndex()] = trim(updated)
             elseif target == "source" then sSrc[slotIndex()] = trim(updated)
@@ -582,8 +583,11 @@ local function drawMenu(event)
             local altimeterSelected = selectedRow == 6
             lcd.drawText(8, 50, "Altimeter-Scale:",
                 ((altimeterSelected and editField == 0) and INVERS or 0))
-            lcd.drawText(104, 50, padStr(trim(altimeterSource), 4),
-                ((altimeterSelected and editField == 5) and INVERS or 0))
+            local altimeterText = padStr(trim(altimeterSource), 4)
+            for i = 1, 4 do
+                local flags = (altimeterSelected and editField == 5 and editCharIdx == i) and INVERS or 0
+                lcd.drawText(104 + (i - 1) * 6, 50, string.sub(altimeterText, i, i), flags)
+            end
         end
     else
         local rows = {
@@ -597,9 +601,9 @@ local function drawMenu(event)
             lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
         end
         if calibrationMessage ~= "" then
-            lcd.drawText(1, 44, calibrationMessage, SMLSIZE)
+            lcd.drawText(1, 50, calibrationMessage, SMLSIZE)
         elseif axisMessage ~= "" then
-            lcd.drawText(1, 44, axisMessage, SMLSIZE)
+            lcd.drawText(1, 50, axisMessage, SMLSIZE)
         end
     end
     local scrollSelected = selectedRow > menuContentRows()
