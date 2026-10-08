@@ -63,26 +63,26 @@ Der optionale MPU-Gyro-Sketch wartet nach dem Einschalten 25 Sekunden, bevor er 
 
 -3D view:
 
-![](Lua_Screen1.png) 
+![](\DOKU\Lua_Screen1.png) 
 
 -Classic view
 
-![](Lua_Screen9.png)
+![](\DOKU\Lua_Screen9.png)
 
 -Menu pages (Settings)
 
-![](Lua_Screen2.png)
+![](\DOKU\Lua_Screen2.png)
 
-![](Lua_Screen3.png)
+![](\DOKU\Lua_Screen3.png)
 
-![](Lua_Screen4.png)
+![](\DOKU\Lua_Screen4.png)
 
-![](Lua_Screen5.png)
+![](\DOKU\Lua_Screen5.png)
 
-![](Lua_Screen6.png)
+![](\DOKU\Lua_Screen6.png)
 
-![](Lua_Screen7.png)
+![](\DOKU\Lua_Screen7.png)
 
-![](Lua_Screen8.png)
+![](\DOKU\Lua_Screen8.png)
 
 
