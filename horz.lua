@@ -734,18 +734,28 @@ local function drawHomePointer(bearing, heading, cx, topY, sizeW)
     local delta = ((bearing - heading + 180) % 360) - 180
     local firstTick = math.floor(heading / 5) * 5 - 30 - heading
     local lastTick = math.floor(heading / 5) * 5 + 30 - heading
+    local function drawFilledSideArrow(x, direction)
+        for row = -3, 3 do
+            local inset = math.abs(row)
+            if direction == "left" then
+                lcd.drawLine(x, topY + 4 + row, x + 6 - inset, topY + 4 + row, SOLID, FORCE)
+            else
+                lcd.drawLine(x - 6 + inset, topY + 4 + row, x, topY + 4 + row, SOLID, FORCE)
+            end
+        end
+    end
     if delta < firstTick then
         local x = cx - sizeW + 1
-        lcd.drawLine(x + 4, topY + 1, x, topY + 4, SOLID, FORCE)
-        lcd.drawLine(x, topY + 4, x + 4, topY + 7, SOLID, FORCE)
+        drawFilledSideArrow(x, "left")
     elseif delta > lastTick then
         local x = cx + sizeW - 1
-        lcd.drawLine(x - 4, topY + 1, x, topY + 4, SOLID, FORCE)
-        lcd.drawLine(x, topY + 4, x - 4, topY + 7, SOLID, FORCE)
+        drawFilledSideArrow(x, "right")
     else
         local x = math.floor(cx + delta * 0.75 + 0.5)
-        lcd.drawLine(x - 3, topY + 3, x, topY - 1, SOLID, FORCE)
-        lcd.drawLine(x + 3, topY + 3, x, topY - 1, SOLID, FORCE)
+        for row = 0, 3 do
+            local halfWidth = row
+            lcd.drawLine(x - halfWidth, topY - 1 + row, x + halfWidth, topY - 1 + row, SOLID, FORCE)
+        end
     end
 end
 
@@ -846,25 +856,28 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     planeLine(pitch + 45, true)
 
     -- Dezente 45°- und 90°-Marken mit beweglicher Pitch-/Roll-Anzeige.
-    local rollMarks = { -90, -45, 0, 45, 90 }
-    for i = 1, #rollMarks do
-        if math.abs(rollMarks[i]) < 90 then
-            local x = cx + (rollMarks[i] / 90) * sizeW
-            lcd.drawLine(x, top + 1, x, top + 2, SOLID, FORCE)
-        end
-    end
-    local rollX = cx + (math.max(-90, math.min(90, roll)) / 90) * sizeW
-    lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
-
     local pitchMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #pitchMarks do
         if math.abs(pitchMarks[i]) < 90 then
             local y = cy - (pitchMarks[i] / 90) * sizeH
             lcd.drawLine(left + 1, y, left + 2, y, SOLID, FORCE)
+            lcd.drawLine(right - 1, y, right - 2, y, SOLID, FORCE)
         end
     end
     local pitchY = cy - (math.max(-90, math.min(90, pitch)) / 90) * sizeH
     lcd.drawLine(left + 2, pitchY - 1, left + 2, pitchY + 1, SOLID, FORCE)
+    lcd.drawLine(right - 2, pitchY - 1, right - 2, pitchY + 1, SOLID, FORCE)
+    local rollMarks = { -90, -45, 0, 45, 90 }
+    for i = 1, #rollMarks do
+        if math.abs(rollMarks[i]) < 90 then
+            local x = cx + (rollMarks[i] / 90) * sizeW
+            lcd.drawLine(x, top + 1, x, top + 2, SOLID, FORCE)
+            lcd.drawLine(x, bottom - 1, x, bottom - 2, SOLID, FORCE)
+        end
+    end
+    local rollX = cx + (math.max(-90, math.min(90, roll)) / 90) * sizeW
+    lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
+    lcd.drawLine(rollX - 1, bottom - 2, rollX + 1, bottom - 2, SOLID, FORCE)
 end
 
 local function run(event)
@@ -944,7 +957,7 @@ local function run(event)
     if viewMode == 0 then
         lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     end
-    if viewMode == 0 and trim(altimeterSource) ~= "" then
+    if trim(altimeterSource) ~= "" then
         local alt = readSlot(trim(altimeterSource), "")
         local altTickY = cy + ((alt % 5) * (sizeH / 5)) - (sizeH / 2)
         local tickStep = sizeH / 2
@@ -952,7 +965,7 @@ local function run(event)
             local y = math.floor(altTickY + tick * tickStep + 0.5)
             if y >= cy - sizeH + 2 and y <= cy + sizeH - 2 then
                 local length = (tick % 2 == 0) and 5 or 3
-                lcd.drawLine(cx - sizeW + 1, y, cx - sizeW + 1 + length, y, SOLID, FORCE)
+                lcd.drawLine(cx - sizeW, y, cx - sizeW + length, y, SOLID, FORCE)
             end
         end
     end
