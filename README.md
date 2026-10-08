@@ -1,6 +1,104 @@
 ## Naza-M V1/V2 to FrSky SmartPort Telemetrie Bridge - Arduino
 -  Project Site: https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ 8.Okt.2026 
+
+-->     scroll down for german explanations    <--
   
+- Integrates all GPS data and compass heading from the DJI Naza-M V1/V2 into the native FrSky SmartPort telemetry data channel S.Port.
+
+- Uses NazaDecoder library [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) and FrSkySportTelemetry library [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
+
+- Auto-detected sensors: Latitude, Longitude, Altitude, Speed, Heading, Timestamp, Satellites*, FixType*
+*)Satellite count and GPS fix type, which are not included in the FrSky GPS packet, are transmitted using auxiliary values of the standard RPM sensor (which also contains T1+T2). 
+RPM itself can be deleted later. Simply rename T1+T2 to "Sats" and "GFix".
+
+### Hardware
+
+- Arduino with ATMega328P 5V (in my case, a repurposed old S-OSD/iOSD REMZIBI module with an ATmega328P on it, but it will work with any Arduino 328P/328PB)
+- Only one hardware serial input for the GPS signal and one software serial output for S.Port transmission are needed. Optional: one LED output.
+- For other hardware, only the pin assignment of the input/output needs to be adapted and possibly the settings for the programmer in Arduino or your preferred flashing method.
+
+### Connections
+
+  In my case:
+- ATmega328P Pin PD7: via 1k resistor to SmartPort line ("CH3 In THRO" on my S-OSD module).
+- ATmega328P Pin PD0: Serial RX pin (PD0 / RXD) connected to NAZA<->GPS cable TX (Pin 2 orange, next to Pin 1 GND black).
+- 1x Status LED of your choice ("valid packet detected"): ATmega328P Pin 13/PB1 -> Pin 9 in Arduino! (on S-OSD module: "F1-In" pin with appropriate series resistor via LED to ground)
+- If you are using a reprogrammed S-OSD module like I am, do not pass the GPS through the module as normally intended. The pins "to GPS" and "to LED" from the module diagram are not directly connected 1:1.
+- Therefore, a simple tap must be made from the GPS cable for TX and GND, or much better: build a pass-through connector from the desoldered connector and pins that you no longer need.
+- #########
+- OPTIONAL: For safety, I installed a 3.3V->5V level converter on the serial GPS TX signal (3.3V) to the Arduino (5V). So 3.3V from small regulator and 5V to the level shifter, with LV1 to GPS(TX) and HV1 to PD7(Pin 30).
+- #########
+- OPTIONAL: MPU-6000/6050 sensor or similair, connection via I²C -> my LUA script `horz.lua` also works with this -> See instructions further down in the text.
+- #########
+
+### Programming the Arduino with ATmega328P
+- Arduino IDE: Tools -> Board -> "Arduino Pro or Mini Pro" -> Processor: 16MHz 5V -> Programmer -> STK 500 dev. -> Sketch -> Upload Programmer (Ctrl+Shift+U)
+- VIA ISP CABLE ON THE ISP CONNECTOR -> KEEP BOOT BUTTON ON MODULE PRESSED FIRMLY DURING FLASHING.
+- The ATmega328P has only ONE serial interface; active GPS and serial monitor for testing cannot run simultaneously.
+
+### LUA Script Instructions - Attitude Display and Telemetry Display Script - for SmartPort Transmitters like Taranis QX9 EdgeTX @ 2.11.7 (and compatible)
+--
+- `horz.lua` offers sources `ANGLES` (receiver values `Ptch`/`Roll`) and `VECTOR` (normalized `AccX/Y/Z`) in the menu. In vector mode, `fwd`, `side`, and `down` can be set with signs; `Calibrate` first determines the gravity axis and then the forward axis by tilting nose-down.
+
+- For the Archer mounted on its side, use these start values: `fwd=X+`, `side=Z-`, `down=Y+`: nose down gives `AccX+`, lower right gives `AccZ+`, and down is `AccY+`. 
+When using the Gyro-Arduino sketch, set these Lua axes in the menu to `fwd=X+`, `side=Y+`, `down=Z-`; this is not the Archer default setting. Pitch/Roll are not mixed with raw axes; Heading remains `Hdg` from the Naza.
+
+- In the sensor menu, `+/-` cycles through sources for slot entries; the rotary encoder edits individual characters.
+Short ENTER jumps through characters during editing; holding ENTER skips the current field and goes directly to the next one.
+
+- On sensor page 2, `Altimeter-Scale` can be entered separately and manually (default `Alt`); this source controls the 2.5-m/5-m altitude marks on the left edge of the box in both views. On page 4 (`Axis Settings`), `View` toggles the 3D attitude display 3D/Classic; `Attitude` selects the attitude source and `Calibrate` starts vector calibration.
+
+- 3D view shows subtle two-sided scales at 45°/90° angles; the compass bar and filled home arrow remain. `View` can be switched back to the classic horizon view at any time. The 3D mode also works with the corrected `Ptch`/`Roll` values (`ANGLES`); raw values of all three acceleration axes are only needed in `VECTOR` mode.
+
+- The display in the horizon center can be switched to a catalog sensor on menu page 3 under `inside Horizon` and turned off with `is visible?`. By default it is active and displays `Alt`.
+
+- Next to the satellite count, the main view shows a 10×10-pixel symbol: without GPS fix, the symbol and number are hidden; from fix 1, the satellite base blinks; with 2D/3D fix, signal rays are added. After more than 10 seconds of stable 3D fix, the symbol blinks for one minute if it drops to fix 2 or below for longer than 3 seconds.
+
+- The home arrow is set from the GPS position on the first valid 3D fix after Lua start and points relative to `Hdg` to the starting position. The direction is marked within the visible compass scale; outside the scale, an arrow on the left or right edge points in the appropriate direction. Below 5 m distance it is hidden due to GPS position noise; after a Lua restart, home is reset.
+
+- The sketch waits 25 seconds after power-on before reading MPU data. It then averages the gyro offset for about one second; the model must be stationary during this measurement. The attitude is then initialized from the actual acceleration direction – a tilted power-on position is not subtracted as zero position.
+
+-- Example images:
+  
+![](DOKU/Case_compl.jpg)
+
+- 3D view:
+
+![](DOKU/Lua_Screen1.png) 
+
+- Classic view
+
+![](DOKU/Lua_Screen9.png)
+
+- Menu pages (Settings)
+
+![](DOKU/Lua_Screen2.png)
+
+![](DOKU/Lua_Screen3.png)
+
+![](DOKU/Lua_Screen4.png)
+
+![](DOKU/Lua_Screen5.png)
+
+![](DOKU/Lua_Screen6.png)
+
+![](DOKU/Lua_Screen7.png)
+
+![](DOKU/Lua_Screen8.png)
+
+
+##########################################################################
+
+##########################################################################
+
+##########################################################################
+
+##########################################################################
+
+
+## Naza-M V1/V2 to FrSky SmartPort Telemetrie Bridge - Arduino
+-  Project Site: https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ 8.Okt.2026 
+
 - integriert alle GPS-Daten und das Kompass-Heading vom DJI Naza-M V1/V2 in den nativen FrSky SmartPort Telemetrie-Datenkanal S.Port.
 
 - verwendet NazaDecoder Bibliothek [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) und FrSkySportTelemetry Bibiliothek [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
@@ -59,34 +157,5 @@ Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspring
 - Der Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
 
--- Beispiel Bilder:
-  
-![](DOKU/Case_compl.jpg)
-
-
-
--3D view:
-
-![](DOKU/Lua_Screen1.png) 
-
--Classic view
-
-![](DOKU/Lua_Screen9.png)
-
--Menu pages (Settings)
-
-![](DOKU/Lua_Screen2.png)
-
-![](DOKU/Lua_Screen3.png)
-
-![](DOKU/Lua_Screen4.png)
-
-![](DOKU/Lua_Screen5.png)
-
-![](DOKU/Lua_Screen6.png)
-
-![](DOKU/Lua_Screen7.png)
-
-![](DOKU/Lua_Screen8.png)
-
+-- Beispiel Bilder: siehe oben
 
