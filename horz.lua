@@ -23,6 +23,7 @@ local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
 -- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
 local CONFIG_READ_LIMIT = 1024
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
+-- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
 local HOME_MIN_DISTANCE_METERS, COMPASS_PIXELS_PER_DEGREE = 5, 0.75
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
