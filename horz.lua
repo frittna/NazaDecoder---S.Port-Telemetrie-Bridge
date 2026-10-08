@@ -1,7 +1,7 @@
 -- Künstlicher Horizont und Telemetrie Sensor Anzeige für FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 07.Okt.2026
 
 local invPitch, invRoll, invHdg = 0, 0, 0
-local groundMode, attitudeMode, viewMode = 0, 1, 0
+local groundMode, attitudeMode, viewMode = 0, 1, 1
 local pitchSource, rollSource = "Ptch", "Roll"
 local insideSource, insideEnabled = "Alt", 1
 local altimeterSource = "Alt"
@@ -82,7 +82,7 @@ end
 
 local function setDefaults()
     invPitch, invRoll, invHdg = 0, 0, 0
-    groundMode, attitudeMode, viewMode = 0, 1, 0
+    groundMode, attitudeMode, viewMode = 0, 1, 1
     pitchSource, rollSource = "Ptch", "Roll"
     insideSource, insideEnabled = "Alt", 1
     altimeterSource = "Alt"
@@ -399,10 +399,10 @@ local function handleMenu(event)
                 editCharIdx = 1
             end
         elseif menuPage == 4 then
-            if selectedRow == 4 then
+            if selectedRow == 5 then
                 attitudeMode = (attitudeMode == 1) and 2 or 1
                 saveConfig()
-            elseif selectedRow == 6 then
+            elseif selectedRow == 4 then
                 viewMode = 1 - viewMode
                 saveConfig()
             elseif selectedRow <= 3 then
@@ -419,7 +419,7 @@ local function handleMenu(event)
                     axisEditing = true
                     axisMessage = ""
                 end
-            elseif selectedRow == 5 then
+            elseif selectedRow == 6 then
                 calibrationStep = 1
                 calibrationLevel = nil
                 calibrationMessage = ""
@@ -598,14 +598,14 @@ local function drawMenu(event)
     else
         local rows = {
             "Forward: " .. fwdAxis, "Side: " .. sideAxis, "Down: " .. downAxis,
+            "View: " .. ((viewMode == 1) and "3D" or "Classic"),
             "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR"),
-            "Calibrate Attitude", "View: " .. ((viewMode == 1) and "3D" or "Classic")
+            "Calibrate Attitude"
         }
         for i = 1, #rows do
-            local y = (i == 6) and 50 or (10 + (i - 1) * 8)
+            local y = 10 + (i - 1) * 8
             local selected = i == selectedRow
-            lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i],
-                (selected and INVERS or 0) + ((i == 6) and SMLSIZE or 0))
+            lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
         end
         if selectedRow ~= 6 then
             if calibrationMessage ~= "" then
@@ -849,20 +849,20 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     local rollMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #rollMarks do
         local x = cx + (rollMarks[i] / 90) * sizeW
-        local length = (math.abs(rollMarks[i]) == 90) and 3 or 2
-        lcd.drawLine(x, top + 1, x, top + length, SOLID, FORCE)
+        local length = (math.abs(rollMarks[i]) == 90) and 2 or 1
+        lcd.drawLine(x, top + 2, x, top + 1 + length, SOLID, FORCE)
     end
     local rollX = cx + (math.max(-90, math.min(90, roll)) / 90) * sizeW
-    lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
+    lcd.drawLine(rollX - 1, top + 3, rollX + 1, top + 3, SOLID, FORCE)
 
     local pitchMarks = { -90, -45, 0, 45, 90 }
     for i = 1, #pitchMarks do
         local y = cy - (pitchMarks[i] / 90) * sizeH
-        local length = (math.abs(pitchMarks[i]) == 90) and 3 or 2
-        lcd.drawLine(left + 1, y, left + length, y, SOLID, FORCE)
+        local length = (math.abs(pitchMarks[i]) == 90) and 2 or 1
+        lcd.drawLine(left + 2, y, left + 1 + length, y, SOLID, FORCE)
     end
     local pitchY = cy - (math.max(-90, math.min(90, pitch)) / 90) * sizeH
-    lcd.drawLine(left + 2, pitchY - 1, left + 2, pitchY + 1, SOLID, FORCE)
+    lcd.drawLine(left + 3, pitchY - 1, left + 3, pitchY + 1, SOLID, FORCE)
 end
 
 local function run(event)

@@ -36,7 +36,7 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 
 Im Sensor-Menü schalten `+/-` bei Slot-Quellen durch den Katalog; der Drehgeber bearbeitet einzelne Zeichen.
 Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspringt das aktuelle Feld und führt direkt zum nächsten.
-Auf Sensorseite 2 lässt sich `Altimeter-Scale` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert die 2,5-m-/5-m-Höhenstriche. Auf Seite 4 (`Axis Settings`) wählen `Attitude` und `Calibrate` die Lagequelle beziehungsweise Vektorkalibrierung. `View` schaltet zwischen der bisherigen Horizontansicht und einer kompakten 3D-Lageansicht in derselben Box um. In 3D zeigen dezente Skalen 45°-/90°-Lagen; die Kompassleiste und Home-Markierung bleiben erhalten.
+Auf Sensorseite 2 lässt sich `Altimeter-Scale` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert die 2,5-m-/5-m-Höhenstriche. Auf Seite 4 (`Axis Settings`) schaltet `View` standardmäßig auf die kompakte 3D-Lageansicht in derselben Box um; `Attitude` wählt die Lagequelle und `Calibrate` startet die Vektorkalibrierung. In 3D zeigen dezente Skalen 45°-/90°-Lagen; die Kompassleiste und Home-Markierung bleiben erhalten. `View` kann jederzeit auf die bisherige Horizontansicht zurückgestellt werden. Der 3D-Modus funktioniert auch mit den korrigierten `Ptch`/`Roll`-Werten (`ANGLES`); Rohwerte aller drei Beschleunigungsachsen werden nur im `VECTOR`-Modus benötigt.
 
 Die Anzeige in der Horizontmitte lässt sich auf Menüseite 3 unter `Inside Hor.` auf einen Katalogsensor umstellen und über `Anzeige` abschalten. Standardmäßig ist sie aktiv und zeigt `Alt`.
 
