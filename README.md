@@ -1,7 +1,7 @@
 ## Naza-M V1/V2 to FrSky SmartPort Telemetrie Bridge - Arduino
 -  Project Site: https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ 8.Okt.2026 
 
--->     scroll down for german explanations    <--
+-->   runter scrollen für die deutsche Beschreibung  --  scroll down for german explanations   <--
   
 - Integrates all GPS data and compass heading from the DJI Naza-M V1/V2 into the native FrSky SmartPort telemetry data channel S.Port.
 
