@@ -907,29 +907,28 @@ local function run(event)
     local homeBearing = homeDirection(gpsLat, gpsLon)
 
     local cx, sizeW, cy, sizeH = 76, 26, 35, 28
-        local pitchOffset, dx, dy
-        if viewMode == 1 then
-            draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
-        else
-            pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
-            local rollAngle = roll * 0.01745329252
-            dx, dy = math.cos(rollAngle) * (sizeW - 1), math.sin(rollAngle) * (sizeW - 1)
-            local isUpsideDown = math.abs(roll) > 90
-            if groundMode > 0 then
-                for y = cy - sizeH + 1, cy + sizeH - 1 do
-                    local left, right = cx - sizeW + 1, cx + sizeW - 1
-                    if math.abs(dy) > 0.01 then
-                        local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
-                        if dy > 0 then right = math.min(right, cross)
-                        else left = math.max(left, cross) end
-                    elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
-                        if y <= cy + pitchOffset then left = right + 1 end
-                    elseif y >= cy + pitchOffset then left = right + 1 end
-                    if left <= right then
-                        if groundMode == 1 and y % 2 == 0 then lcd.drawLine(left, y, right, y, SOLID, FORCE)
-                        elseif groundMode == 2 then
-                            for x = left + ((left + y) % 2), right, 2 do lcd.drawPoint(x, y) end
-                        end
+    local pitchOffset, dx, dy
+    if viewMode == 1 then
+        draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
+    else
+        pitchOffset = math.max(math.min(pitch * 0.6, sizeH - 2), -(sizeH - 2))
+        local rollAngle = roll * 0.01745329252
+        dx, dy = math.cos(rollAngle) * (sizeW - 1), math.sin(rollAngle) * (sizeW - 1)
+        local isUpsideDown = math.abs(roll) > 90
+        if groundMode > 0 then
+            for y = cy - sizeH + 1, cy + sizeH - 1 do
+                local left, right = cx - sizeW + 1, cx + sizeW - 1
+                if math.abs(dy) > 0.01 then
+                    local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
+                    if dy > 0 then right = math.min(right, cross)
+                    else left = math.max(left, cross) end
+                elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
+                    if y <= cy + pitchOffset then left = right + 1 end
+                elseif y >= cy + pitchOffset then left = right + 1 end
+                if left <= right then
+                    if groundMode == 1 and y % 2 == 0 then lcd.drawLine(left, y, right, y, SOLID, FORCE)
+                    elseif groundMode == 2 then
+                        for x = left + ((left + y) % 2), right, 2 do lcd.drawPoint(x, y) end
                     end
                 end
             end
