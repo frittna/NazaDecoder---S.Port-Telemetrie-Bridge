@@ -847,10 +847,10 @@ local function run(event)
         local blinkOn = (now % 80) < 60
         local satsX = cx - sizeW - 7
         if (fix ~= 1 or blinkOn) and (not warningActive or blinkOn) then
-            drawSatellite(satsX - 8, cy - sizeH - 2, fix)
+            drawSatellite(satsX - 8, cy - sizeH - 5, fix)
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX + 1 , cy - sizeH + 6, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX + 1 , cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
     end
     --lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)  --rausgenommen aus horiz.box, da jetzt mit satelliten symbol gelöst
     if insideEnabled == 1 then
