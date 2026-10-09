@@ -89,15 +89,43 @@ local allowedChars =
 " aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*" ..
 DEGREE_UTF8 .. "%/() " -- Leerzeichen am Anfang/Ende (Null-Abstand)
 
+local function textCharacters(value)
+    local characters, index = {}, 1
+    while index <= #value do
+        local character = string.sub(value, index, index + 1)
+        if character == DEGREE_UTF8 then
+            characters[#characters + 1] = DEGREE_UTF8
+            index = index + 2
+        else
+            characters[#characters + 1] = string.sub(value, index, index)
+            index = index + 1
+        end
+    end
+    return characters
+end
+
+local function textSlice(value, first, last)
+    local characters = textCharacters(value)
+    local result = {}
+    for index = math.max(1, first), math.min(last or #characters, #characters) do
+        result[#result + 1] = characters[index]
+    end
+    return table.concat(result)
+end
+
+local allowedCharList = textCharacters(allowedChars)
+
 local function trim(str)
     if not str then return "" end
     return (string.gsub(tostring(str), "^%s*(.-)%s*$", "%1"))
 end
 
 local function padStr(str, len)
-    str = tostring(str or "")
-    if #str < len then str = str .. string.rep(" ", len - #str) end
-    return string.sub(str, 1, len)
+    local characters = textCharacters(tostring(str or ""))
+    while #characters < len do characters[#characters + 1] = " " end
+    local result = {}
+    for index = 1, len do result[index] = characters[index] end
+    return table.concat(result)
 end
 
 local function modelPath()
@@ -245,7 +273,7 @@ local function loadConfig()
                             i >= 1 and i <= 9 and validText(name, SLOT_NAME_LEGACY_MAX) and
                             validText(source, 4) and validText(unit, 3) then
                             sName[i], sSrc[i], sUnit[i] =
-                                string.sub(name, 1, SLOT_NAME_MAX), source, unit
+                                textSlice(name, 1, SLOT_NAME_MAX), source, unit
                         end
                     end
                 end
@@ -261,7 +289,7 @@ local function saveConfig()
         trim(pitchSource), trim(rollSource), trim(altimeterSource)
     for i = 1, 9 do
         sName[i], sSrc[i], sUnit[i] =
-            string.sub(trim(sName[i]), 1, SLOT_NAME_MAX), trim(sSrc[i]), trim(sUnit[i])
+            textSlice(trim(sName[i]), 1, SLOT_NAME_MAX), trim(sSrc[i]), trim(sUnit[i])
     end
     local f = io.open(modelPath(), "w")
     if not f then
@@ -296,16 +324,23 @@ end
 
 local charPos, charPosKey = 0, ""
 local function changeChar(text, index, delta)
-    local char = string.sub(text, index, index)
-    local position = string.find(allowedChars, char, 1, true) or 1
+    local characters = textCharacters(text)
+    local char = characters[index]
+    local position = 1
+    for i = 1, #allowedCharList do
+        if allowedCharList[i] == char then
+            position = i
+            break
+        end
+    end
     local key = menuPage .. ":" .. selectedRow .. ":" .. editField .. ":" .. index
-    if char == " " and charPosKey == key and string.sub(allowedChars, charPos, charPos) == " " then
+    if char == " " and charPosKey == key and allowedCharList[charPos] == " " then
         position = charPos
     end
-    position = math.max(1, math.min(#allowedChars, position + delta))
+    position = math.max(1, math.min(#allowedCharList, position + delta))
     charPos, charPosKey = position, key
-    return string.sub(text, 1, index - 1) .. string.sub(allowedChars, position, position) ..
-        string.sub(text, index + 1)
+    characters[index] = allowedCharList[position]
+    return table.concat(characters)
 end
 
 local function slotIndex()
@@ -327,7 +362,7 @@ local function menuContentRows()
 end
 
 local function menuRows()
-    return menuContentRows() + 1
+    return menuContentRows() + ((menuPage == 1) and 0 or 1)
 end
 
 local function nextMenuPage()
@@ -517,7 +552,7 @@ local function handleMenu(event)
                 math.min(selectedColumn, 2) or 1
         end
     elseif event == EVT_PAGE_BREAK then
-        nextMenuPage()
+        if menuPage ~= 1 then nextMenuPage() end
     elseif event == EVT_EXIT_BREAK then
         if menuPage ~= 1 then
             saveConfig()
@@ -700,9 +735,9 @@ end
 local function editDisplay(value, length, selectedIndex)
     local padded = padStr(value, length)
     local index = selectedIndex or editCharIdx
-    return string.sub(padded, 1, index - 1) .. "[" ..
-        string.sub(padded, index, index) .. "]" ..
-        string.sub(padded, index + 1)
+    return textSlice(padded, 1, index - 1) .. "[" ..
+        textSlice(padded, index, index) .. "]" ..
+        textSlice(padded, index + 1)
 end
 
 local function drawMenu(event)
@@ -779,12 +814,12 @@ local function drawMenu(event)
             local selected = row == selectedRow
             local editing = selected and editField > 0
             local fullName = padStr(editing and sName[i] or trim(sName[i]), SLOT_NAME_MAX)
-            local name = string.sub(fullName, 1, SLOT_NAME_VISIBLE)
+            local name = textSlice(fullName, 1, SLOT_NAME_VISIBLE)
             local nameText = name
             if selected and editField == 1 then
                 local start = math.max(1, math.min(editCharIdx - SLOT_NAME_VISIBLE + 1,
                     SLOT_NAME_MAX - SLOT_NAME_VISIBLE + 1))
-                nameText = editDisplay(string.sub(fullName, start, start + SLOT_NAME_VISIBLE - 1),
+                nameText = editDisplay(textSlice(fullName, start, start + SLOT_NAME_VISIBLE - 1),
                     SLOT_NAME_VISIBLE, editCharIdx - start + 1)
             end
             lcd.drawText(0, y, selected and ">" or " ", SMLSIZE)
@@ -849,10 +884,12 @@ local function drawMenu(event)
             end
         end
     end
-    local scrollSelected = selectedRow > menuContentRows()
-    lcd.drawText(1, 58, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
-    lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
-        (scrollSelected and INVERS or 0))
+    if menuPage ~= 1 then
+        local scrollSelected = selectedRow > menuContentRows()
+        lcd.drawText(1, 58, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
+        lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
+            (scrollSelected and INVERS or 0))
+    end
 end
 
 local function init()
