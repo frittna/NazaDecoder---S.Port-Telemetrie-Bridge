@@ -752,7 +752,7 @@ local function drawMenu(event)
         local viewFlags = (selectedRow == 8 and selectedColumn == 2) and INVERS or 0
         lcd.drawText(8, line(5), "SENSORS", sensorsFlags + SMLSIZE)
         lcd.drawText(78, line(5), "AXES", axesFlags + SMLSIZE)
-        lcd.drawText(8, line(6), "ATT:" ..
+        lcd.drawText(8, line(6), "ATTITUDE:" ..
             ((attitudeMode == 1) and "ANGLES" or "VECTOR"), attitudeFlags + SMLSIZE)
         lcd.drawText(78, line(6), "VIEW:" ..
             ((viewMode == 1) and "3D" or "Classic"), viewFlags + SMLSIZE)
