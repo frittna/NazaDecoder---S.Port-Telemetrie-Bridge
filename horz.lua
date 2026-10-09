@@ -105,13 +105,21 @@ local function textCharacters(value)
     return characters
 end
 
+local function joinCharacters(characters)
+    local result = ""
+    for index = 1, #characters do
+        result = result .. characters[index]
+    end
+    return result
+end
+
 local function textSlice(value, first, last)
     local characters = textCharacters(value)
     local result = {}
     for index = math.max(1, first), math.min(last or #characters, #characters) do
         result[#result + 1] = characters[index]
     end
-    return table.concat(result)
+    return joinCharacters(result)
 end
 
 local function textLength(value)
@@ -130,7 +138,7 @@ local function padStr(str, len)
     while #characters < len do characters[#characters + 1] = " " end
     local result = {}
     for index = 1, len do result[index] = characters[index] end
-    return table.concat(result)
+    return joinCharacters(result)
 end
 
 local function modelPath()
@@ -351,7 +359,7 @@ local function changeChar(text, index, delta)
     position = math.max(1, math.min(#allowedCharList, position + delta))
     charPos, charPosKey = position, key
     characters[index] = allowedCharList[position]
-    return table.concat(characters)
+    return joinCharacters(characters)
 end
 
 local function slotIndex()
