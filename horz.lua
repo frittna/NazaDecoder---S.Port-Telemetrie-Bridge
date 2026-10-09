@@ -401,7 +401,8 @@ local function handleMenu(event)
         end
         return true
     end
-    local sensorRow = menuPage == 2 or menuPage == 3
+    local sensorRow = (menuPage == 2 or menuPage == 3) and
+        selectedRow <= menuContentRows()
     local configLinks = menuPage == 1 and selectedRow >= 7 and selectedRow <= 8
     if editField == 0 and (sensorRow or configLinks) and (horizontalLeft or horizontalRight) then
         local delta = horizontalRight and 1 or -1
