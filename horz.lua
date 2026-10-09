@@ -39,6 +39,7 @@ local HOME_MIN_DISTANCE_METERS, COMPASS_PIXELS_PER_DEGREE = 5, 0.75
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 4, 4
 -- Alte Configs duerfen 12 Zeichen enthalten; beim Laden wird auf 4 gekuerzt.
 local SLOT_NAME_LEGACY_MAX = 12
+local MM_LIMIT = 1000000
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
     if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
@@ -185,6 +186,12 @@ local function isFinite(value)
     return value and value == value and value ~= math.huge and value ~= -math.huge
 end
 
+local function roundToPrecision(value, precision)
+    local scale = 10 ^ precision
+    return (value >= 0 and math.floor(value * scale + 0.5) or
+        math.ceil(value * scale - 0.5)) / scale
+end
+
 local function loadConfig()
     setDefaults()
     configLoadWarning = false
@@ -258,7 +265,7 @@ local function loadConfig()
                         local i, minValue, maxValue = tonumber(iText), tonumber(minText), tonumber(maxText)
                         if i and i % 1 == 0 and i >= 1 and i <= 9 and
                             isFinite(minValue) and isFinite(maxValue) and
-                            math.abs(minValue) <= 1000000 and math.abs(maxValue) <= 1000000 then
+                            math.abs(minValue) <= MM_LIMIT and math.abs(maxValue) <= MM_LIMIT then
                             sMin[i], sMax[i] = minValue, maxValue
                         end
                     elseif key == "AXES" then
@@ -432,12 +439,9 @@ local function handleMenu(event)
             local step = 10 ^ -sPrecision[mmEditSlot]
             if not rotary then step = step * 10 end
             local target = (mmRow == 1) and sMin or sMax
-            local scale = 10 ^ sPrecision[mmEditSlot]
             local value = target[mmEditSlot] + (positive and step or -step)
-            value = (value >= 0 and math.floor(value * scale + 0.5) or
-                math.ceil(value * scale - 0.5)) / scale
-            target[mmEditSlot] = math.max(-1000000, math.min(1000000,
-                value))
+            target[mmEditSlot] = math.max(-MM_LIMIT, math.min(MM_LIMIT,
+                roundToPrecision(value, sPrecision[mmEditSlot])))
         elseif event == EVT_ENTER_BREAK then
             if mmRow >= 3 then
                 mmEditSlot = nil
@@ -1288,44 +1292,44 @@ local function drawLeftColumn()
         end
         lcd.drawLine(0, 31, 40, 31, SOLID, FORCE)
     else
-        local i = leftActive[1]
+        local slot = leftActive[1]
         local name, both, value, unit = text(1)
         drawName(1, 1, name, 33)
         drawBigValue(1, 15, both, value, unit, 43)
         if graphEnabled ~= 1 then
             sparkCount, sparkHead, sparkSlot = 0, 0, 0
-            local low = sessionMin[i] or slotValues[i]
-            local high = sessionMax[i] or slotValues[i]
-            lcd.drawText(1, 36, "Max:" .. string.format("%." .. sPrecision[i] .. "f", high), SMLSIZE)
-            lcd.drawText(1, 51, "Min:" .. string.format("%." .. sPrecision[i] .. "f", low), SMLSIZE)
+            local low = sessionMin[slot] or slotValues[slot]
+            local high = sessionMax[slot] or slotValues[slot]
+            lcd.drawText(1, 36, "Max:" .. string.format("%." .. sPrecision[slot] .. "f", high), SMLSIZE)
+            lcd.drawText(1, 51, "Min:" .. string.format("%." .. sPrecision[slot] .. "f", low), SMLSIZE)
             return
         end
         local interval = math.floor(graphSeconds * 100 / SPARK_N)
-        if sparkSlot ~= i or sparkSrc ~= sSrc[i] or sparkInterval ~= interval then
+        if sparkSlot ~= slot or sparkSrc ~= sSrc[slot] or sparkInterval ~= interval then
             sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
-                0, 0, 0, i, sSrc[i], interval
+                0, 0, 0, slot, sSrc[slot], interval
         end
         local now = getTime()
         if sparkCount == 0 or now - sparkLast >= interval then
             sparkLast = now
-            sparkBuf[sparkHead + 1] = slotValues[i]
+            sparkBuf[sparkHead + 1] = slotValues[slot]
             sparkHead = (sparkHead + 1) % SPARK_N
             if sparkCount < SPARK_N then sparkCount = sparkCount + 1 end
         end
         local graphLow, graphHigh
-        if sMin[i] ~= 0 or sMax[i] ~= 0 then
-            graphLow, graphHigh = sMin[i], sMax[i]
+        if sMin[slot] ~= 0 or sMax[slot] ~= 0 then
+            graphLow, graphHigh = sMin[slot], sMax[slot]
             if graphLow == 0 then
-                graphLow = math.min(sessionMin[i] or (graphHigh - 1), graphHigh - 1)
+                graphLow = math.min(sessionMin[slot] or (graphHigh - 1), graphHigh - 1)
             elseif graphHigh == 0 then
-                graphHigh = math.max(sessionMax[i] or (graphLow + 1), graphLow + 1)
+                graphHigh = math.max(sessionMax[slot] or (graphLow + 1), graphLow + 1)
             end
             if graphHigh <= graphLow then graphHigh = graphLow + 1 end
         end
         drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
         if graphLow ~= nil then
-            lcd.drawText(1, 34, string.format("%." .. sPrecision[i] .. "f", graphHigh), SMLSIZE)
-            lcd.drawText(1, 54, string.format("%." .. sPrecision[i] .. "f", graphLow), SMLSIZE)
+            lcd.drawText(1, 34, string.format("%." .. sPrecision[slot] .. "f", graphHigh), SMLSIZE)
+            lcd.drawText(1, 54, string.format("%." .. sPrecision[slot] .. "f", graphLow), SMLSIZE)
         end
     end
 end
