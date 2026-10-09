@@ -39,7 +39,7 @@ local atan2 = math.atan2 or function(y, x)
 end
 
 local defaults = {
-    names = { "RX", "Alt", "+/-", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
+    names = { "RX", "Alt", "VSp", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
     sources = { "RSSI", "Alt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
     units = { "dB", "m", "m/s", "kmh", "m", "°", "V", "V", "A" }
 }
