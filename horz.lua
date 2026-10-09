@@ -37,6 +37,8 @@ local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 local EARTH_MEAN_DIAMETER_METERS = 12742000
 local HOME_MIN_DISTANCE_METERS, COMPASS_PIXELS_PER_DEGREE = 5, 0.75
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 4, 4
+-- Alte Configs duerfen 12 Zeichen enthalten; beim Laden wird auf 4 gekuerzt.
+local SLOT_NAME_LEGACY_MAX = 12
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
     if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
@@ -126,8 +128,7 @@ local function validAxis(value)
 end
 
 local function validText(value, maxLen)
-    if #value > maxLen then return false end
-    local i = 1
+    local i, charCount = 1, 0
     while i <= #value do
         local char = string.sub(value, i, i + 1)
         if char == "°" then
@@ -137,6 +138,8 @@ local function validText(value, maxLen)
         else
             return false
         end
+        charCount = charCount + 1
+        if charCount > maxLen then return false end
     end
     return true
 end
@@ -234,7 +237,7 @@ local function loadConfig()
                             string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
                         local i = tonumber(iText)
                         if iText and name and source and unit and i and i % 1 == 0 and
-                            i >= 1 and i <= 9 and validText(name, 12) and
+                            i >= 1 and i <= 9 and validText(name, SLOT_NAME_LEGACY_MAX) and
                             validText(source, 4) and validText(unit, 3) then
                             sName[i], sSrc[i], sUnit[i] =
                                 string.sub(name, 1, SLOT_NAME_MAX), source, unit
@@ -1314,10 +1317,16 @@ local function run(event)
         if sessionSource[i] ~= source then
             sessionSource[i], sessionMin[i], sessionMax[i] = source, nil, nil
         end
-        sessionMin[i] = math.min(sessionMin[i] or slotValues[i], slotValues[i])
-        sessionMax[i] = math.max(sessionMax[i] or slotValues[i], slotValues[i])
+        if sOn[i] == 1 and source ~= "" then
+            sessionMin[i] = math.min(sessionMin[i] or slotValues[i], slotValues[i])
+            sessionMax[i] = math.max(sessionMax[i] or slotValues[i], slotValues[i])
+        else
+            sessionMin[i], sessionMax[i] = nil, nil
+        end
     end
-    filteredAlt = slotValues[2] * 0.25 + filteredAlt * 0.75
+    if trim(altimeterSource) ~= "" then
+        filteredAlt = readSlot(trim(altimeterSource), "") * 0.25 + filteredAlt * 0.75
+    end
     local pitch, roll = getAttitude()
     local rawHdg = (tonumber(getValue("Hdg")) or 0) * ((invHdg == 1) and -1 or 1)
     rawHdg = (rawHdg % 360 + 360) % 360
@@ -1442,8 +1451,8 @@ local function run(event)
             end
         end
     end
-    lcd.drawText(129, 51, string.format("%.0f", pitch) .. "°p", SMLSIZE + RIGHT)
-    lcd.drawText(129, 58, string.format("%.0f", roll) .. "°r", SMLSIZE + RIGHT)
+    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "P°", SMLSIZE + RIGHT)
+    lcd.drawText(127, 58, string.format("%.0f", roll) .. "R°", SMLSIZE + RIGHT)
     if satelliteVisible then drawSatellite(satelliteX, satelliteY, fix) end
     if configSaveFailed then
         lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
