@@ -113,6 +113,10 @@ local function textSlice(value, first, last)
     return table.concat(result)
 end
 
+local function textLength(value)
+    return #textCharacters(value)
+end
+
 local allowedCharList = textCharacters(allowedChars)
 
 local function trim(str)
@@ -1186,7 +1190,7 @@ local FONTS_BIG = { { MIDSIZE, 8 }, { 0, 6 }, { SMLSIZE, 5 } }
 local FONTS_NORMAL = { { 0, 6 }, { SMLSIZE, 5 } }
 
 local function pickFont(text, limit, fonts)
-    local len = #text
+    local len = textLength(text)
     for _, f in ipairs(fonts) do
         if len * f[2] <= limit then return f[1] end
     end
@@ -1194,9 +1198,10 @@ local function pickFont(text, limit, fonts)
 end
 
 local function drawName(x, y, name, limit)
-    if #name * 8 + 8 <= limit then
+    local len = textLength(name)
+    if len * 8 + 8 <= limit then
         lcd.drawText(x, y, name .. ":", MIDSIZE)
-    elseif #name * 8 <= limit then
+    elseif len * 8 <= limit then
         lcd.drawText(x, y, name, MIDSIZE)
     else
         lcd.drawText(x, y, name .. ":", pickFont(name .. ":", limit, FONTS_BIG))
@@ -1205,10 +1210,11 @@ end
 
 -- Wert immer MIDSIZE, Einheit klein dahinter; nur wenn es nicht passt: Fallback nach Breite
 local function drawBigValue(x, y, both, value, unit, limit)
-    if #value * 8 + #unit * 5 <= limit then
+    local valueLength, unitLength = textLength(value), textLength(unit)
+    if valueLength * 8 + unitLength * 5 <= limit then
         lcd.drawText(x, y, value, MIDSIZE)
         if unit ~= "" then
-            lcd.drawText(x + #value * 8 + 1, y + 5, unit, SMLSIZE)
+            lcd.drawText(x + valueLength * 8 + 1, y + 5, unit, SMLSIZE)
         end
     else
         lcd.drawText(x, y, both, pickFont(both, limit, FONTS_BIG))
@@ -1241,7 +1247,7 @@ end
 local function drawLeftColumn()
     local n = 0
     for i = 1, 6 do
-        if sOn[i] == 1 and string.sub(trim(sName[i]), 1, 4) ~= "" then
+        if sOn[i] == 1 and textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE) ~= "" then
             n = n + 1
             leftActive[n] = i
         end
@@ -1250,7 +1256,7 @@ local function drawLeftColumn()
     if n == 0 then return end
     local function text(k)
         local i = leftActive[k]
-        return string.sub(trim(sName[i]), 1, 4),
+        return textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE),
             string.format(slotFormats[i], slotValues[i]) .. trim(sUnit[i]),
             string.format(slotFormats[i], slotValues[i]), trim(sUnit[i])
     end
@@ -1267,7 +1273,8 @@ local function drawLeftColumn()
             local y = 1 + (k - 1) * 21
             local limit = (k == 1) and 33 or 43
             -- eine gemeinsame Schrift pro Block (nach dem breiteren Text)
-            local font = pickFont((#value > #name + 1) and value or (name .. ":"), limit, FONTS_NORMAL)
+            local font = pickFont((textLength(value) > textLength(name) + 1) and
+                value or (name .. ":"), limit, FONTS_NORMAL)
             lcd.drawText(1, y, name .. ":", font)
             lcd.drawText(1, y + 9, value, font)
         end
@@ -1483,7 +1490,7 @@ local function run(event)
 
     drawLeftColumn()
     for i = 7, 9 do
-        local name, unit = string.sub(trim(sName[i]), 1, 4), trim(sUnit[i])
+        local name, unit = textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE), trim(sUnit[i])
         if sOn[i] == 1 and name ~= "" then
             local value = string.format(slotFormats[i], slotValues[i])
             do
