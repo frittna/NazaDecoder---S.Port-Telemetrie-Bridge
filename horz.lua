@@ -47,7 +47,7 @@ end
 
 local defaults = {
     names = { "RX", "Alt", "VSp", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
-    sources = { "RSSI", "Alt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
+    sources = { "RSSI", "GAlt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
     units = { "dB", "m", "m/s", "kmh", "m", "°", "V", "V", "A" }
 }
 local sName, sSrc, sUnit = {}, {}, {}
@@ -104,7 +104,7 @@ end
 
 local function setDefaults()
     invPitch, invRoll, invHdg = 0, 0, 0
-    groundMode, attitudeMode, viewMode = 0, 1, 1
+    groundMode, attitudeMode, viewMode = 2, 1, 1
     pitchSource, rollSource = "Ptch", "Roll"
     insideSource, insideEnabled = "Alt", 1
     altimeterSource = "Alt"
@@ -1409,8 +1409,8 @@ local function run(event)
             end
         end
     end
-    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°P", SMLSIZE + RIGHT)
-    lcd.drawText(128, 58, string.format("%.0f", roll) .. "°R", SMLSIZE + RIGHT)
+    lcd.drawText(129, 51, string.format("%.0f", pitch) .. "°p", SMLSIZE + RIGHT)
+    lcd.drawText(129, 58, string.format("%.0f", roll) .. "°r", SMLSIZE + RIGHT)
     if satelliteVisible then drawSatellite(satelliteX, satelliteY, fix) end
     if configSaveFailed then
         lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
