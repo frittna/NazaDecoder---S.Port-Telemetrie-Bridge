@@ -305,6 +305,7 @@ local function slotIndex()
 end
 
 local function sensorColumnCount()
+    if menuPage == 1 and selectedRow >= 7 then return 2 end
     if menuPage == 2 or (menuPage == 3 and selectedRow <= 3) then return 6 end
     if menuPage == 3 and (selectedRow == 4 or selectedRow == 5) then return 2 end
     return 1
@@ -323,8 +324,11 @@ end
 
 local function nextMenuPage()
     if axisEditing then saveConfig() end
-    menuPage = (menuPage % 4) + 1
-    selectedRow = 1
+    if menuPage == 2 then
+        menuPage, selectedRow = 3, 1
+    else
+        menuPage, selectedRow = 1, 1
+    end
     selectedColumn = 1
     axisEditing = false
 end
@@ -368,12 +372,12 @@ local function handleMenu(event)
     if getTime() - menuOpenTime < MENU_OPEN_DEBOUNCE then return true end
     local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT or event == EVT_VIRTUAL_PREV
     local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
-    local horizontalLeft = event ~= nil and
-        ((EVT_LEFT ~= nil and event == EVT_LEFT) or
-         (EVT_VIRTUAL_LEFT ~= nil and event == EVT_VIRTUAL_LEFT))
-    local horizontalRight = event ~= nil and
-        ((EVT_RIGHT ~= nil and event == EVT_RIGHT) or
-         (EVT_VIRTUAL_RIGHT ~= nil and event == EVT_VIRTUAL_RIGHT))
+    local horizontalLeft = event == EVT_ROT_LEFT or
+        (EVT_LEFT ~= nil and event == EVT_LEFT) or
+        (EVT_VIRTUAL_LEFT ~= nil and event == EVT_VIRTUAL_LEFT)
+    local horizontalRight = event == EVT_ROT_RIGHT or
+        (EVT_RIGHT ~= nil and event == EVT_RIGHT) or
+        (EVT_VIRTUAL_RIGHT ~= nil and event == EVT_VIRTUAL_RIGHT)
     if mmEditSlot then
         if (negative or positive) and selectedRow <= 2 then
             local rotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
@@ -397,11 +401,13 @@ local function handleMenu(event)
         end
         return true
     end
-    if (menuPage == 2 or menuPage == 3) and (horizontalLeft or horizontalRight) then
+    local sensorRow = menuPage == 2 or menuPage == 3
+    local configLinks = menuPage == 1 and selectedRow >= 7 and selectedRow <= 8
+    if editField == 0 and (sensorRow or configLinks) and (horizontalLeft or horizontalRight) then
         local delta = horizontalRight and 1 or -1
-        selectedColumn = math.max(1, math.min(sensorColumnCount(), selectedColumn + delta))
         if editField > 0 then saveConfig() end
         editField = 0
+        selectedColumn = math.max(1, math.min(sensorColumnCount(), selectedColumn + delta))
         return true
     end
     if editField > 0 then
@@ -496,13 +502,22 @@ local function handleMenu(event)
         selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
         if menuPage == 2 or menuPage == 3 then
             selectedColumn = math.min(selectedColumn, sensorColumnCount())
+        elseif menuPage == 1 then
+            selectedColumn = (selectedRow >= 7 and selectedRow <= 8) and
+                math.min(selectedColumn, 2) or 1
         end
     elseif event == EVT_PAGE_BREAK then
         nextMenuPage()
     elseif event == EVT_EXIT_BREAK then
-        saveConfig()
-        menuActive = false
-        axisEditing = false
+        if menuPage ~= 1 then
+            saveConfig()
+            menuPage, selectedRow, selectedColumn = 1, 1, 1
+            axisEditing = false
+        else
+            saveConfig()
+            menuActive = false
+            axisEditing = false
+        end
     elseif event == EVT_ENTER_BREAK then
         if selectedRow > menuContentRows() then
             nextMenuPage()
@@ -522,17 +537,25 @@ local function handleMenu(event)
                 invHdg = 1 - invHdg
                 saveConfig()
             elseif selectedRow == 7 then
-                menuPage, selectedRow = 2, 1
+                if selectedColumn == 1 then
+                    menuPage, selectedRow = 2, 1
+                else
+                    menuPage, selectedRow = 4, 1
+                end
                 selectedColumn = 1
             elseif selectedRow == 8 then
-                menuPage, selectedRow = 4, 1
-                selectedColumn = 1
+                if selectedColumn == 1 then
+                    attitudeMode = (attitudeMode == 1) and 2 or 1
+                else
+                    viewMode = 1 - viewMode
+                end
+                saveConfig()
             end
         elseif menuPage == 2 or menuPage == 3 then
             if menuPage == 2 or selectedRow <= 3 then
                 if selectedColumn == 1 then
                     editField, editCharIdx = 1, 1
-                elseif selectedColumn == 2 then
+                elseif selectedColumn == 2 or selectedColumn == 3 then
                     editField = 2
                 elseif selectedColumn == 4 then
                     editField = 3
@@ -722,10 +745,16 @@ local function drawMenu(event)
         end
         lcd.drawText(8, line(4), "Heading:", 0)
         checkbox(line(4), invHdg == 1, selectedRow == 6)
-        lcd.drawText(8, line(5), (selectedRow == 7) and "> Sensors" or "  Sensors",
-            selectedRow == 7 and INVERS or 0)
-        lcd.drawText(8, line(6), (selectedRow == 8) and "> Attitude" or "  Attitude",
-            selectedRow == 8 and INVERS or 0)
+        local sensorsFlags = (selectedRow == 7 and selectedColumn == 1) and INVERS or 0
+        local axesFlags = (selectedRow == 7 and selectedColumn == 2) and INVERS or 0
+        local attitudeFlags = (selectedRow == 8 and selectedColumn == 1) and INVERS or 0
+        local viewFlags = (selectedRow == 8 and selectedColumn == 2) and INVERS or 0
+        lcd.drawText(8, line(5), "SENSORS", sensorsFlags + SMLSIZE)
+        lcd.drawText(78, line(5), "AXES", axesFlags + SMLSIZE)
+        lcd.drawText(8, line(6), "ATT:" ..
+            ((attitudeMode == 1) and "ANGLES" or "VECTOR"), attitudeFlags + SMLSIZE)
+        lcd.drawText(78, line(6), "VIEW:" ..
+            ((viewMode == 1) and "3D" or "Classic"), viewFlags + SMLSIZE)
     elseif menuPage == 2 or menuPage == 3 then
         local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
         local headerY = 8
