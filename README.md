@@ -90,6 +90,12 @@ Short ENTER jumps through characters during editing; holding ENTER skips the cur
 
 ![](DOKU/Lua_Screen8.png)
 
+![](DOKU/Lua_Screen9.png)
+
+![](DOKU/Lua_Screen10.png)
+
+![](DOKU/Lua_Screen11.png)
+
 
 ##########################################################################
 
