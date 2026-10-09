@@ -66,15 +66,9 @@ Short ENTER jumps through characters during editing; holding ENTER skips the cur
   
 ![](DOKU/Case_compl.jpg)
 
-- 3D view:
-
 ![](DOKU/Lua_Screen1.png) 
 
-- Classic view
-
 ![](DOKU/Lua_Screen9.png)
-
-- Menu pages (Settings)
 
 ![](DOKU/Lua_Screen2.png)
 
