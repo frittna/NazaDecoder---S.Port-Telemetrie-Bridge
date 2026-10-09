@@ -133,10 +133,13 @@ local function validText(value, maxLen)
         local char = string.sub(value, i, i + 1)
         if char == "°" then
             i = i + 2
-        elseif string.find(allowedChars, string.sub(value, i, i), 1, true) then
-            i = i + 1
         else
-            return false
+            local byte = string.byte(value, i)
+            local ascii = string.sub(value, i, i)
+            if byte >= 128 or not string.find(allowedChars, ascii, 1, true) then
+                return false
+            end
+            i = i + 1
         end
         charCount = charCount + 1
         if charCount > maxLen then return false end
