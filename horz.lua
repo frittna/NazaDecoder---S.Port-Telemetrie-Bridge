@@ -385,19 +385,24 @@ local function handleMenu(event)
             local step = 10 ^ -sPrecision[mmEditSlot]
             if not rotary then step = step * 10 end
             local target = (selectedRow == 1) and sMin or sMax
+            local scale = 10 ^ sPrecision[mmEditSlot]
+            local value = target[mmEditSlot] + (positive and step or -step)
+            value = (value >= 0 and math.floor(value * scale + 0.5) or
+                math.ceil(value * scale - 0.5)) / scale
             target[mmEditSlot] = math.max(-1000000, math.min(1000000,
-                target[mmEditSlot] + (positive and step or -step)))
-            saveConfig()
+                value))
         elseif event == EVT_ENTER_BREAK then
             if selectedRow >= 3 then
                 mmEditSlot = nil
                 menuPage, selectedRow = mmReturnPage, mmReturnRow
+                saveConfig()
             else
                 selectedRow = selectedRow + 1
             end
         elseif event == EVT_EXIT_BREAK or event == EVT_ENTER_LONG then
             mmEditSlot = nil
             menuPage, selectedRow = mmReturnPage, mmReturnRow
+            saveConfig()
         end
         return true
     end
@@ -406,8 +411,6 @@ local function handleMenu(event)
     local configLinks = menuPage == 1 and selectedRow >= 7 and selectedRow <= 8
     if editField == 0 and (sensorRow or configLinks) and (horizontalLeft or horizontalRight) then
         local delta = horizontalRight and 1 or -1
-        if editField > 0 then saveConfig() end
-        editField = 0
         selectedColumn = math.max(1, math.min(sensorColumnCount(), selectedColumn + delta))
         return true
     end
