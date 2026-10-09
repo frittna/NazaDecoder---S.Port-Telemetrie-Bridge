@@ -52,12 +52,12 @@ local catalog = {
     { "Cels", "%.1f", 1, "V" }, { "celD", "%.2f", 1, "V" },
     { "VFAS", "%.1f", 1, "V" }, { "Curr", "%.1f", 1, "A" },
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
-    { "Ptch", "%.0f", 1, "°" }, { "Roll", "%.0f", 1, "°" }, 
+    { "Ptch", "%.0f", 1, "°" }, { "Roll", "%.0f", 1, "°" },
     { "AccX", "%.2f", 1, "g" }, { "AccY", "%.2f", 1, "g" },
     { "AccZ", "%.2f", 1, "g" }, { "GAlt", "%.0f", 1, "m" },
     { "Sats", "%.0f", 1, "" }, { "Gfix", "%.0f", 1, "" },
     { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
-      
+
 }
 local catalogByName = {}
 for i = 1, #catalog do
@@ -65,10 +65,17 @@ for i = 1, #catalog do
 end
 local slotValues, slotFormats = {}, {}
 local headingLabels = {
-    [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
-    [180] = "S", [225] = "SW", [270] = "W", [315] = "NW"
+    [0] = "N",
+    [45] = "NO",
+    [90] = "O",
+    [135] = "SO",
+    [180] = "S",
+    [225] = "SW",
+    [270] = "W",
+    [315] = "NW"
 }
-local allowedChars = " aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*°%/() "  --Leerzeichen am Anfang/Ende (null-Abstand)
+local allowedChars =
+" aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*°%/() " --Leerzeichen am Anfang/Ende (null-Abstand)
 
 local function trim(str)
     if not str then return "" end
@@ -330,7 +337,9 @@ local function handleMenu(event)
                     negative and -1 or 1)
             elseif event == EVT_ENTER_BREAK then
                 editCharIdx = editCharIdx + 1
-                if editCharIdx > 4 then editField = 0; saveConfig() end
+                if editCharIdx > 4 then
+                    editField = 0; saveConfig()
+                end
             elseif event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
                 editField = 0
                 saveConfig()
@@ -386,25 +395,36 @@ local function handleMenu(event)
         elseif negative or positive then
             local updated = changeChar(padStr(text, maxLen), editCharIdx, negative and -1 or 1)
             if menuPage == 1 then
-                if target == "pitch" then pitchSource = updated
-                elseif target == "roll" then rollSource = updated
+                if target == "pitch" then
+                    pitchSource = updated
+                elseif target == "roll" then
+                    rollSource = updated
                 end
-            elseif target == "altimeter" then altimeterSource = updated
-            elseif target == "name" then sName[slotIndex()] = updated
-            elseif target == "source" then sSrc[slotIndex()] = updated
-            else sUnit[slotIndex()] = updated end
+            elseif target == "altimeter" then
+                altimeterSource = updated
+            elseif target == "name" then
+                sName[slotIndex()] = updated
+            elseif target == "source" then
+                sSrc[slotIndex()] = updated
+            else
+                sUnit[slotIndex()] = updated
+            end
         elseif event == EVT_ENTER_LONG then
             editCharIdx = 1
             editField = editField + 1
             local final = (menuPage == 1) and 1 or 4
-            if editField > final then editField = 0; saveConfig() end
+            if editField > final then
+                editField = 0; saveConfig()
+            end
         elseif event == EVT_ENTER_BREAK then
             editCharIdx = editCharIdx + 1
             if editCharIdx > maxLen then
                 editCharIdx = 1
                 editField = editField + 1
                 local final = (menuPage == 1) and 1 or 4
-                if editField > final then editField = 0; saveConfig() end
+                if editField > final then
+                    editField = 0; saveConfig()
+                end
             end
         elseif event == EVT_EXIT_BREAK then
             editField = 0
@@ -432,12 +452,18 @@ local function handleMenu(event)
         if selectedRow > menuContentRows() then
             nextMenuPage()
         elseif menuPage == 1 then
-            if selectedRow == 1 then groundMode = (groundMode + 1) % 3
-            elseif selectedRow == 2 or selectedRow == 4 then editField = 1; editCharIdx = 1
-            elseif selectedRow == 3 then invPitch = 1 - invPitch
-            elseif selectedRow == 5 then invRoll = 1 - invRoll
-            elseif selectedRow == 6 then invHdg = 1 - invHdg
-            elseif selectedRow == 7 then editField = 6
+            if selectedRow == 1 then
+                groundMode = (groundMode + 1) % 3
+            elseif selectedRow == 2 or selectedRow == 4 then
+                editField = 1; editCharIdx = 1
+            elseif selectedRow == 3 then
+                invPitch = 1 - invPitch
+            elseif selectedRow == 5 then
+                invRoll = 1 - invRoll
+            elseif selectedRow == 6 then
+                invHdg = 1 - invHdg
+            elseif selectedRow == 7 then
+                editField = 6
             end
             if selectedRow == 1 or selectedRow == 3 or selectedRow == 5 or selectedRow == 6 then
                 saveConfig()
@@ -467,9 +493,13 @@ local function handleMenu(event)
                     local axis = (selectedRow == 1 and fwdAxis) or (selectedRow == 2 and sideAxis) or downAxis
                     local value = string.sub(axis, 1, 1) ..
                         ((string.sub(axis, 2, 2) == "+") and "-" or "+")
-                    if selectedRow == 1 then fwdAxis = value
-                    elseif selectedRow == 2 then sideAxis = value
-                    else downAxis = value end
+                    if selectedRow == 1 then
+                        fwdAxis = value
+                    elseif selectedRow == 2 then
+                        sideAxis = value
+                    else
+                        downAxis = value
+                    end
                     axisEditing = false
                     saveConfig()
                 else
@@ -630,8 +660,11 @@ local function drawMenu(event)
                         SLOT_NAME_MAX - SLOT_NAME_VISIBLE + 1))
                     local visible = string.sub(fullName, start, start + SLOT_NAME_VISIBLE - 1)
                     nameText = editDisplay(visible, SLOT_NAME_VISIBLE, editCharIdx - start + 1)
-                elseif editField == 2 then sourceText = editDisplay(source, 4)
-                elseif editField == 3 then unitText = editDisplay(unit, 3) end
+                elseif editField == 2 then
+                    sourceText = editDisplay(source, 4)
+                elseif editField == 3 then
+                    unitText = editDisplay(unit, 3)
+                end
             end
             lcd.drawText(9, y, nameText, (selected and editField == 1) and INVERS or 0)
             lcd.drawText(37, y, ":", 0)
@@ -686,7 +719,8 @@ local function drawMenu(event)
     end
     local scrollSelected = selectedRow > menuContentRows()
     -- Auf Seite 1 steht statt des Leerzeichens das "b" des Hinweistextes (wegen platzmangel so gelöst)
-    lcd.drawText(scrollSelected and 1 or ((menuPage == 1) and 0 or 1), (menuPage == 1 and not scrollSelected) and 57 or 58,
+    lcd.drawText(scrollSelected and 1 or ((menuPage == 1) and 0 or 1),
+        (menuPage == 1 and not scrollSelected) and 57 or 58,
         scrollSelected and ">" or ((menuPage == 1) and "b" or " "),
         scrollSelected and INVERS or ((menuPage == 1) and SMLSIZE or 0))
     lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
@@ -809,14 +843,14 @@ local function drawHomePointer(bearing, heading, cx, topY, sizeW)
         for row = -3, 3 do
             local inset = math.abs(row)
             if direction == "left" then
-                lcd.drawLine(x, topY + 4 + row, x + 6 - inset, topY + 4 + row, SOLID, FORCE)
+                lcd.drawLine(x, topY + 4 + row, x + 4 - inset, topY + 4 + row, SOLID, FORCE)
             else
-                lcd.drawLine(x - 6 + inset, topY + 4 + row, x, topY + 4 + row, SOLID, FORCE)
+                lcd.drawLine(x - 4 + inset, topY + 4 + row, x, topY + 4 + row, SOLID, FORCE)
             end
         end
     end
     if delta < -visibleLimit then
-        local x = cx - sizeW + 1
+        local x = cx - sizeW
         drawFilledSideArrow(x, "left")
     elseif delta > visibleLimit then
         local x = cx + sizeW - 1
@@ -824,8 +858,8 @@ local function drawHomePointer(bearing, heading, cx, topY, sizeW)
     else
         local x = math.floor(cx + delta * COMPASS_PIXELS_PER_DEGREE + 0.5)
         for row = 0, 3 do
-            local halfWidth = row
-            lcd.drawLine(x - halfWidth, topY - 1 + row, x + halfWidth, topY - 1 + row, SOLID, FORCE)
+            local halfWidth = 3 - row
+            lcd.drawLine(x - halfWidth, topY + 1 + row, x + halfWidth, topY + 1 + row, SOLID, FORCE)
         end
     end
 end
@@ -839,8 +873,11 @@ local function getAttitude()
         local values = vectorValues()
         local fwd, side, down = axisValue(values, fwdAxis), axisValue(values, sideAxis), axisValue(values, downAxis)
         local magnitude = math.sqrt(fwd * fwd + side * side + down * down)
-        if magnitude > 0.001 then fwd, side, down = fwd / magnitude, side / magnitude, down / magnitude
-        else fwd, side, down = 0, 0, 1 end
+        if magnitude > 0.001 then
+            fwd, side, down = fwd / magnitude, side / magnitude, down / magnitude
+        else
+            fwd, side, down = 0, 0, 1
+        end
         pitch = atan2(-fwd, math.sqrt(side * side + down * down)) * 57.2957795
         roll = atan2(side, down) * 57.2957795
     end
@@ -906,8 +943,11 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
         local centerValue = b * row + c
         if math.abs(a) > 0.0001 then
             local cross = cx - centerValue / a
-            if a > 0 then leftGround = math.max(leftGround, math.ceil(cross))
-            else rightGround = math.min(rightGround, math.floor(cross)) end
+            if a > 0 then
+                leftGround = math.max(leftGround, math.ceil(cross))
+            else
+                rightGround = math.min(rightGround, math.floor(cross))
+            end
         elseif centerValue < 0 then
             leftGround = rightGround + 1
         end
@@ -980,7 +1020,9 @@ end
 local function drawBigValue(x, y, both, value, unit, limit)
     if #value * 8 + #unit * 5 <= limit then
         lcd.drawText(x, y, value, MIDSIZE)
-        if unit ~= "" then lcd.drawText(x + #value * 8 + 1, y + 7, unit, SMLSIZE) end
+        if unit ~= "" then
+            lcd.drawText(x + #value * 8 + 1, y + 5, unit, SMLSIZE)
+        end
     else
         lcd.drawText(x, y, both, pickFont(both, limit, FONTS_BIG))
     end
@@ -1124,13 +1166,19 @@ local function run(event)
                 local left, right = cx - sizeW + 1, cx + sizeW - 1
                 if math.abs(dy) > 0.01 then
                     local cross = math.floor(cx + ((y - cy - pitchOffset) * dx) / dy)
-                    if dy > 0 then right = math.min(right, cross)
-                    else left = math.max(left, cross) end
+                    if dy > 0 then
+                        right = math.min(right, cross)
+                    else
+                        left = math.max(left, cross)
+                    end
                 elseif (pitchOffset >= 0 and not isUpsideDown) or (pitchOffset < 0 and isUpsideDown) then
                     if y <= cy + pitchOffset then left = right + 1 end
-                elseif y >= cy + pitchOffset then left = right + 1 end
+                elseif y >= cy + pitchOffset then
+                    left = right + 1
+                end
                 if left <= right then
-                    if groundMode == 1 and y % 2 == 0 then lcd.drawLine(left, y, right, y, SOLID, FORCE)
+                    if groundMode == 1 and y % 2 == 0 then
+                        lcd.drawLine(left, y, right, y, SOLID, FORCE)
                     elseif groundMode == 2 then
                         for x = left + ((left + y) % 2), right, 2 do lcd.drawPoint(x, y) end
                     end
@@ -1140,7 +1188,7 @@ local function run(event)
     end
     lcd.drawRectangle(cx - sizeW, cy - sizeH, sizeW * 2, sizeH * 2, FORCE)
     lcd.drawLine(cx - sizeW - 5, cy, cx - sizeW - 1, cy, SOLID, FORCE)
-    lcd.drawLine(cx + sizeW , cy, cx + sizeW + 4, cy, SOLID, FORCE)
+    lcd.drawLine(cx + sizeW, cy, cx + sizeW + 4, cy, SOLID, FORCE)
     lcd.drawLine(cx - 2, cy, cx + 2, cy, SOLID, FORCE)
     lcd.drawLine(cx, cy - 2, cx, cy + 2, SOLID, FORCE)
     if viewMode == 0 then
@@ -1170,7 +1218,7 @@ local function run(event)
             drawSatellite(satsX - 8, cy - sizeH - 5, fix)
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX + 1 , cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX + 1, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
     end
     if insideEnabled == 1 then
         local entry = catalogByName[string.lower(trim(insideSource))]
@@ -1214,8 +1262,11 @@ local function run(event)
     end
     lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
     lcd.drawText(128, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
-    if configSaveFailed then lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
-    elseif configLoadWarning then lcd.drawText(52, 0, "OLD CFG", SMLSIZE + INVERS) end
+    if configSaveFailed then
+        lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
+    elseif configLoadWarning then
+        lcd.drawText(52, 0, "OLD CFG", SMLSIZE + INVERS)
+    end
     return 0
 end
 
