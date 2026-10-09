@@ -7,6 +7,12 @@ local pitchSource, rollSource = "Ptch", "Roll"
 local insideSource, insideEnabled = "Alt", 1
 local altimeterSource = "Alt"
 local graphSeconds = 30 -- Graph X-Time (10..999 s)
+local graphEnabled = 1
+local sPrecision, sMin, sMax = {}, {}, {}
+local sessionMin, sessionMax, sessionSource = {}, {}, {}
+local SPARK_N = 40
+local sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
+    {}, 0, 0, 0, 0, nil, 0
 -- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
 local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
 local filteredAlt, filteredHdg = 0, 0
@@ -14,6 +20,7 @@ local homeLat, homeLon
 local gpsFix3Since, gpsLowFixSince, gpsWarningSince = nil, nil, nil
 local menuActive, menuPage, selectedRow = false, 1, 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
+local mmEditSlot, mmReturnPage, mmReturnRow = nil, 1, 1
 local calibrationStep, calibrationLevel = 0, nil
 local calibrationMessage = ""
 local axisMessage = ""
@@ -29,6 +36,10 @@ local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 local EARTH_MEAN_DIAMETER_METERS = 12742000
 local HOME_MIN_DISTANCE_METERS, COMPASS_PIXELS_PER_DEGREE = 5, 0.75
 local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 12, 4
+local DEGREE = string.char(0xB0)
+local function normalizeDegree(value)
+    return string.gsub(value, "\194\176", DEGREE)
+end
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
     if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
@@ -40,19 +51,19 @@ end
 local defaults = {
     names = { "RX", "Alt", "VSp", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
     sources = { "RSSI", "Alt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
-    units = { "dB", "m", "m/s", "kmh", "m", "°", "V", "V", "A" }
+    units = { "dB", "m", "m/s", "kmh", "m", DEGREE, "V", "V", "A" }
 }
 local sName, sSrc, sUnit = {}, {}, {}
 local sOn = {} -- Slot sichtbar (1) / abgeschaltet (0), Namen bleiben erhalten
 
 local catalog = {
-    { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
+    { "", "%.1f", 1, "" }, { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
     { "GSpd", "%.0f", 1, "kmh" }, { "Dist", "%.0f", 1, "m" },
-    { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "°" },
+    { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, DEGREE },
     { "Cels", "%.1f", 1, "V" }, { "celD", "%.2f", 1, "V" },
     { "VFAS", "%.1f", 1, "V" }, { "Curr", "%.1f", 1, "A" },
     { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
-    { "Ptch", "%.0f", 1, "°" }, { "Roll", "%.0f", 1, "°" },
+    { "Ptch", "%.0f", 1, DEGREE }, { "Roll", "%.0f", 1, DEGREE },
     { "AccX", "%.2f", 1, "g" }, { "AccY", "%.2f", 1, "g" },
     { "AccZ", "%.2f", 1, "g" }, { "GAlt", "%.0f", 1, "m" },
     { "Sats", "%.0f", 1, "" }, { "Gfix", "%.0f", 1, "" },
@@ -75,7 +86,7 @@ local headingLabels = {
     [315] = "NW"
 }
 local allowedChars =
-" aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*°%/() " --Leerzeichen am Anfang/Ende (null-Abstand)
+" aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*" .. DEGREE .. "%/() " -- Leerzeichen am Anfang/Ende (Null-Abstand)
 
 local function trim(str)
     if not str then return "" end
@@ -101,10 +112,14 @@ local function setDefaults()
     insideSource, insideEnabled = "Alt", 1
     altimeterSource = "Alt"
     graphSeconds = 30
+    graphEnabled = 1
     fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
     for i = 1, 9 do
         sName[i], sSrc[i], sUnit[i] = defaults.names[i], defaults.sources[i], defaults.units[i]
         sOn[i] = 1
+        local entry = catalogByName[string.lower(defaults.sources[i])]
+        sPrecision[i] = entry and tonumber(string.match(entry[2], "%.(%d)f")) or 0
+        sMin[i], sMax[i] = 0, 0
     end
 end
 
@@ -119,6 +134,10 @@ local function validText(value, maxLen)
         if not string.find(allowedChars, string.sub(value, i, i), 1, true) then return false end
     end
     return true
+end
+
+local function isFinite(value)
+    return value and value == value and value ~= math.huge and value ~= -math.huge
 end
 
 local function loadConfig()
@@ -161,16 +180,18 @@ local function loadConfig()
                         end
                     elseif key == "SOURCES" then
                         local p, r = string.match(value, "^(.-),(.-)$")
+                        p, r = p and normalizeDegree(p), r and normalizeDegree(r)
                         if p ~= nil and r ~= nil and validText(p, 4) and validText(r, 4) then
                             pitchSource, rollSource = p, r
                         end
                     elseif key == "INSIDE" then
                         local source, enabled = string.match(value, "^(.-),([01])$")
+                        source = source and normalizeDegree(source)
                         if source and validText(source, 4) then
                             insideSource, insideEnabled = source, tonumber(enabled)
                         end
-                    elseif key == "ALTIMETER-SCALE" and validText(value, 4) then
-                        altimeterSource = value
+                    elseif key == "ALTIMETER-SCALE" and validText(normalizeDegree(value), 4) then
+                        altimeterSource = normalizeDegree(value)
                     elseif key == "SLOTON" then
                         if string.match(value, "^[01]+$") and #value == 9 then
                             for i = 1, 9 do sOn[i] = tonumber(string.sub(value, i, i)) end
@@ -179,6 +200,23 @@ local function loadConfig()
                         local secs = tonumber(value)
                         if secs and secs % 1 == 0 and secs >= 10 and secs <= 999 then
                             graphSeconds = secs
+                        end
+                    elseif key == "GRAPH" and (value == "0" or value == "1") then
+                        graphEnabled = tonumber(value)
+                    elseif key == "SLOTPRECI" then
+                        local iText, precision = string.match(value, "^(%d+)|(%d)$")
+                        local i, number = tonumber(iText), tonumber(precision)
+                        if i and i % 1 == 0 and i >= 1 and i <= 9 and number and number <= 4 then
+                            sPrecision[i] = number
+                        end
+                    elseif key == "SLOTRANGE" then
+                        local iText, minText, maxText =
+                            string.match(value, "^(%d+)|([^|]*)|([^|]*)$")
+                        local i, minValue, maxValue = tonumber(iText), tonumber(minText), tonumber(maxText)
+                        if i and i % 1 == 0 and i >= 1 and i <= 9 and
+                            isFinite(minValue) and isFinite(maxValue) and
+                            math.abs(minValue) <= 1000000 and math.abs(maxValue) <= 1000000 then
+                            sMin[i], sMax[i] = minValue, maxValue
                         end
                     elseif key == "AXES" then
                         local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
@@ -193,9 +231,11 @@ local function loadConfig()
                             string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
                         local i = tonumber(iText)
                         if iText and name and source and unit and i and i % 1 == 0 and
-                            i >= 1 and i <= 9 and validText(name, SLOT_NAME_MAX) and
-                            validText(source, 4) and validText(unit, 3) then
-                            sName[i], sSrc[i], sUnit[i] = name, source, unit
+                            i >= 1 and i <= 9 and validText(normalizeDegree(name), SLOT_NAME_MAX) and
+                            validText(normalizeDegree(source), 4) and
+                            validText(normalizeDegree(unit), 3) then
+                            sName[i], sSrc[i], sUnit[i] =
+                                normalizeDegree(name), normalizeDegree(source), normalizeDegree(unit)
                         end
                     end
                 end
@@ -207,8 +247,13 @@ end
 
 local function saveConfig()
     -- Leerzeichen am Rand werden beim Beenden der Eingabe entfernt
-    pitchSource, rollSource, altimeterSource = trim(pitchSource), trim(rollSource), trim(altimeterSource)
-    for i = 1, 9 do sName[i], sSrc[i], sUnit[i] = trim(sName[i]), trim(sSrc[i]), trim(sUnit[i]) end
+    pitchSource, rollSource, altimeterSource =
+        normalizeDegree(trim(pitchSource)), normalizeDegree(trim(rollSource)),
+        normalizeDegree(trim(altimeterSource))
+    for i = 1, 9 do
+        sName[i], sSrc[i], sUnit[i] =
+            normalizeDegree(trim(sName[i])), normalizeDegree(trim(sSrc[i])), normalizeDegree(trim(sUnit[i]))
+    end
     local f = io.open(modelPath(), "w")
     if not f then
         configSaveFailed = true
@@ -226,10 +271,13 @@ local function saveConfig()
     for i = 1, 9 do on = on .. sOn[i] end
     io.write(f, "SLOTON=" .. on .. "\n")
     io.write(f, "GRAPHTIME=" .. graphSeconds .. "\n")
+    io.write(f, "GRAPH=" .. graphEnabled .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
     for i = 1, 9 do
         io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
             trim(sSrc[i]) .. "|" .. trim(sUnit[i]) .. "\n")
+        io.write(f, "SLOTPRECI=" .. i .. "|" .. sPrecision[i] .. "\n")
+        io.write(f, "SLOTRANGE=" .. i .. "|" .. sMin[i] .. "|" .. sMax[i] .. "\n")
     end
     io.close(f)
     configSaveFailed = false
@@ -256,7 +304,7 @@ local function slotIndex()
 end
 
 local function menuContentRows()
-    if menuPage == 1 then return 7 end
+    if menuPage == 1 then return 8 end
     if menuPage == 2 then return 6 end
     if menuPage == 3 then return 6 end
     return 6
@@ -273,29 +321,20 @@ local function nextMenuPage()
     axisEditing = false
 end
 
-local function cycleCatalog(slot, delta)
+local function cycleCatalogValue(source, delta)
     local found = 1
     for i = 1, #catalog do
-        if string.lower(catalog[i][1]) == string.lower(trim(sSrc[slot])) then
+        if string.lower(catalog[i][1]) == string.lower(trim(source)) then
             found = i
             break
         end
     end
     found = math.max(1, math.min(#catalog, found + delta))
-    sSrc[slot] = catalog[found][1]
-    sUnit[slot] = catalog[found][4]
+    return catalog[found][1], catalog[found][4]
 end
 
-local function cycleInsideSource(delta)
-    local found = 1
-    for i = 1, #catalog do
-        if string.lower(catalog[i][1]) == string.lower(trim(insideSource)) then
-            found = i
-            break
-        end
-    end
-    found = math.max(1, math.min(#catalog, found + delta))
-    insideSource = catalog[found][1]
+local function cycleSlotSource(slot, delta)
+    sSrc[slot], sUnit[slot] = cycleCatalogValue(sSrc[slot], delta)
 end
 
 local function cycleAxis(which, delta)
@@ -321,10 +360,44 @@ local function handleMenu(event)
     if getTime() - menuOpenTime < MENU_OPEN_DEBOUNCE then return true end
     local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT or event == EVT_VIRTUAL_PREV
     local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
+    if mmEditSlot then
+        if (negative or positive) and selectedRow <= 2 then
+            local rotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
+                event == EVT_VIRTUAL_PREV or event == EVT_VIRTUAL_NEXT
+            local step = 10 ^ -sPrecision[mmEditSlot]
+            if not rotary then step = step * 10 end
+            local target = (selectedRow == 1) and sMin or sMax
+            target[mmEditSlot] = math.max(-1000000, math.min(1000000,
+                target[mmEditSlot] + (positive and step or -step)))
+            saveConfig()
+        elseif event == EVT_ENTER_BREAK then
+            if selectedRow >= 3 then
+                mmEditSlot = nil
+                menuPage, selectedRow = mmReturnPage, mmReturnRow
+            else
+                selectedRow = selectedRow + 1
+            end
+        elseif event == EVT_EXIT_BREAK or event == EVT_ENTER_LONG then
+            mmEditSlot = nil
+            menuPage, selectedRow = mmReturnPage, mmReturnRow
+        end
+        return true
+    end
     if editField > 0 then
+        if menuPage == 1 and (selectedRow == 2 or selectedRow == 4) and editField == 2 then
+            if negative or positive then
+                local source = (selectedRow == 2) and pitchSource or rollSource
+                source = cycleCatalogValue(source, positive and 1 or -1)
+                if selectedRow == 2 then pitchSource = source else rollSource = source end
+            elseif event == EVT_ENTER_BREAK or event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
+                editField = 0
+                saveConfig()
+            end
+            return true
+        end
         if menuPage == 3 and selectedRow == 4 and editField == 4 then
             if negative or positive then
-                cycleInsideSource(positive and 1 or -1)
+                insideSource = cycleCatalogValue(insideSource, positive and 1 or -1)
             elseif event == EVT_ENTER_BREAK or event == EVT_EXIT_BREAK then
                 editField = 0
                 saveConfig()
@@ -333,20 +406,14 @@ local function handleMenu(event)
         end
         if menuPage == 3 and selectedRow == 6 and editField == 5 then
             if negative or positive then
-                altimeterSource = changeChar(padStr(altimeterSource, 4), editCharIdx,
-                    negative and -1 or 1)
-            elseif event == EVT_ENTER_BREAK then
-                editCharIdx = editCharIdx + 1
-                if editCharIdx > 4 then
-                    editField = 0; saveConfig()
-                end
-            elseif event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
+                altimeterSource = cycleCatalogValue(altimeterSource, positive and 1 or -1)
+            elseif event == EVT_ENTER_BREAK or event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
                 editField = 0
                 saveConfig()
             end
             return true
         end
-        if menuPage == 1 and selectedRow == 7 and editField == 6 then
+        if menuPage == 3 and selectedRow == 5 and editField == 6 then
             if negative or positive then
                 -- Drehgeber: 1 s, +/- Tasten: 10 s
                 local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
@@ -359,76 +426,54 @@ local function handleMenu(event)
             end
             return true
         end
-        if editField == 4 and menuPage ~= 1 then
+        if menuPage == 2 or (menuPage == 3 and selectedRow <= 3) then
             local slot = slotIndex()
-            if negative or positive or event == EVT_ENTER_BREAK then
+            if editField == 1 then
+                if negative or positive then
+                    sName[slot] = changeChar(padStr(sName[slot], SLOT_NAME_MAX), editCharIdx,
+                        negative and -1 or 1)
+                elseif event == EVT_ENTER_BREAK then
+                    editCharIdx = editCharIdx + 1
+                    if editCharIdx > SLOT_NAME_MAX then editCharIdx, editField = 1, 2 end
+                end
+            elseif editField == 2 then
+                if negative or positive then
+                    cycleSlotSource(slot, positive and 1 or -1)
+                elseif event == EVT_ENTER_BREAK then
+                    editField = 3
+                end
+            elseif editField == 3 then
+                if negative or positive then
+                    sPrecision[slot] = math.max(0, math.min(4,
+                        sPrecision[slot] + (positive and 1 or -1)))
+                elseif event == EVT_ENTER_BREAK then
+                    editField = 4
+                end
+            elseif editField == 4 and event == EVT_ENTER_BREAK then
+                mmEditSlot = slot
+                mmReturnPage, mmReturnRow = menuPage, selectedRow
+                selectedRow = 1
+            elseif editField == 5 and (negative or positive or event == EVT_ENTER_BREAK) then
                 sOn[slot] = 1 - sOn[slot]
-            elseif event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
+            end
+            if event == EVT_ENTER_LONG then
+                if editField == 1 then
+                    editField, editCharIdx = 2, 1
+                elseif editField == 2 then
+                    editField = 3
+                elseif editField == 3 then
+                    editField = 4
+                elseif editField == 4 then
+                    editField = 5
+                else
+                    editField = 0
+                    saveConfig()
+                end
+            elseif event == EVT_EXIT_BREAK then
                 editField = 0
                 saveConfig()
             end
             return true
-        end
-        local text, maxLen, target
-        if menuPage == 1 then
-            if selectedRow == 2 then
-                target, text = "pitch", pitchSource
-            elseif selectedRow == 4 then
-                target, text = "roll", rollSource
-            else
-                return true
-            end
-            maxLen = 4
-        else
-            local slot = slotIndex()
-            target = (editField == 1) and "name" or ((editField == 2) and "source" or "unit")
-            text = (target == "name" and sName[slot]) or
-                (target == "source" and sSrc[slot]) or sUnit[slot]
-            maxLen = (target == "name") and SLOT_NAME_VISIBLE or ((target == "unit") and 3 or 4)
-        end
-        -- Bei Slot-Quellen waehlt +/- Katalogsensoren; der Drehgeber editiert Zeichen.
-        local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
-            event == EVT_VIRTUAL_PREV or event == EVT_VIRTUAL_NEXT
-        local isCatalogCycle = (negative or positive) and menuPage ~= 1 and editField == 2 and not isRotary
-        if isCatalogCycle then
-            cycleCatalog(slotIndex(), negative and -1 or 1)
-        elseif negative or positive then
-            local updated = changeChar(padStr(text, maxLen), editCharIdx, negative and -1 or 1)
-            if menuPage == 1 then
-                if target == "pitch" then
-                    pitchSource = updated
-                elseif target == "roll" then
-                    rollSource = updated
-                end
-            elseif target == "altimeter" then
-                altimeterSource = updated
-            elseif target == "name" then
-                sName[slotIndex()] = updated
-            elseif target == "source" then
-                sSrc[slotIndex()] = updated
-            else
-                sUnit[slotIndex()] = updated
-            end
-        elseif event == EVT_ENTER_LONG then
-            editCharIdx = 1
-            editField = editField + 1
-            local final = (menuPage == 1) and 1 or 4
-            if editField > final then
-                editField = 0; saveConfig()
-            end
-        elseif event == EVT_ENTER_BREAK then
-            editCharIdx = editCharIdx + 1
-            if editCharIdx > maxLen then
-                editCharIdx = 1
-                editField = editField + 1
-                local final = (menuPage == 1) and 1 or 4
-                if editField > final then
-                    editField = 0; saveConfig()
-                end
-            end
-        elseif event == EVT_EXIT_BREAK then
-            editField = 0
-            saveConfig()
         end
         return true
     end
@@ -454,29 +499,32 @@ local function handleMenu(event)
         elseif menuPage == 1 then
             if selectedRow == 1 then
                 groundMode = (groundMode + 1) % 3
+                saveConfig()
             elseif selectedRow == 2 or selectedRow == 4 then
-                editField = 1; editCharIdx = 1
+                if attitudeMode ~= 2 then editField = 2 end
             elseif selectedRow == 3 then
                 invPitch = 1 - invPitch
+                saveConfig()
             elseif selectedRow == 5 then
                 invRoll = 1 - invRoll
+                saveConfig()
             elseif selectedRow == 6 then
                 invHdg = 1 - invHdg
-            elseif selectedRow == 7 then
-                editField = 6
-            end
-            if selectedRow == 1 or selectedRow == 3 or selectedRow == 5 or selectedRow == 6 then
                 saveConfig()
+            elseif selectedRow == 7 then
+                menuPage, selectedRow = 2, 1
+            elseif selectedRow == 8 then
+                menuPage, selectedRow = 4, 1
             end
         elseif menuPage == 2 or menuPage == 3 then
             if menuPage == 3 and selectedRow == 4 then
-                editField = 4
-            elseif menuPage == 3 and selectedRow == 5 then
                 insideEnabled = 1 - insideEnabled
+                saveConfig()
+            elseif menuPage == 3 and selectedRow == 5 then
+                graphEnabled = 1 - graphEnabled
                 saveConfig()
             elseif menuPage == 3 and selectedRow == 6 then
                 editField = 5
-                editCharIdx = 1
             else
                 editField = 1
                 editCharIdx = 1
@@ -511,6 +559,16 @@ local function handleMenu(event)
                 calibrationLevel = nil
                 calibrationMessage = ""
             end
+        end
+    elseif event == EVT_ENTER_LONG then
+        if menuPage == 3 and selectedRow == 4 then
+            editField = 4
+        elseif menuPage == 3 and selectedRow == 5 then
+            editField = 6
+        elseif menuPage == 3 and selectedRow == 6 then
+            editField = 5
+        elseif menuPage == 2 or (menuPage == 3 and selectedRow <= 3) then
+            editField, editCharIdx = 2, 1
         end
     end
     return true
@@ -598,6 +656,17 @@ local function drawMenu(event)
         "--CONFIG PAGE--", "--SENSOR PAGE 1--",
         "--SENSOR PAGE 2--", "--AXIS SETTING--"
     }
+    if mmEditSlot then
+        lcd.drawText(1, 1, "-- SENSOR MIN/MAX --", INVERS + SMLSIZE)
+        lcd.drawText(1, 13, trim(sName[mmEditSlot]) .. " / " .. trim(sSrc[mmEditSlot]), SMLSIZE)
+        lcd.drawText(1, 25, (selectedRow == 1 and ">" or " ") .. "MIN: " ..
+            string.format("%." .. sPrecision[mmEditSlot] .. "f", sMin[mmEditSlot]), SMLSIZE)
+        lcd.drawText(1, 37, (selectedRow == 2 and ">" or " ") .. "MAX: " ..
+            string.format("%." .. sPrecision[mmEditSlot] .. "f", sMax[mmEditSlot]), SMLSIZE)
+        lcd.drawText(1, 52, (selectedRow == 3 and ">" or " ") .. "Done", SMLSIZE)
+        lcd.drawText(74, 52, "ENTER: next", SMLSIZE)
+        return
+    end
     local heading = configSaveFailed and "SAVE FAILED" or
         (configLoadWarning and "OLD CFG: DEFAULTS" or titles[menuPage])
     lcd.drawText(1, 1, heading, INVERS + SMLSIZE)
@@ -616,7 +685,6 @@ local function drawMenu(event)
             lcd.drawText(80, y, "inv:", SMLSIZE)
             lcd.drawText(104, y, on and "[X]" or "[ ]", selected and INVERS or 0)
         end
-        lcd.drawText(1, line(1), " ", 0)
         lcd.drawText(8, line(1), "Ground as:", (selectedRow == 1) and INVERS or 0)
         lcd.drawText(73, line(1), ({ "White", "Lines", "Points" })[groundMode + 1], 0)
         for k = 0, 1 do
@@ -624,77 +692,79 @@ local function drawMenu(event)
             local source = (k == 0) and pitchSource or rollSource
             lcd.drawText(8, y, (k == 0) and "Pitch:" or "Roll:",
                 (selectedRow == item and editField == 0) and INVERS or 0)
-            if selectedRow == item and editField > 0 then
-                lcd.drawText(48, y, editDisplay(source, 4), INVERS + SMLSIZE)
-            else
-                lcd.drawText(48, y, trim(source), 0)
-            end
+            local sourceText = (attitudeMode == 2) and "----" or source
+            lcd.drawText(48, y, sourceText,
+                (attitudeMode == 2) and SMLSIZE or
+                ((selectedRow == item and editField == 2) and INVERS or 0))
             checkbox(y, ((k == 0) and invPitch or invRoll) == 1, selectedRow == item + 1)
         end
         lcd.drawText(8, line(4), "Heading:", 0)
         checkbox(line(4), invHdg == 1, selectedRow == 6)
-        lcd.drawText(8, line(5), "Graph X-Time:",
-            (selectedRow == 7 and editField == 0) and INVERS or 0)
-        lcd.drawText(86, line(5), "[" .. graphSeconds .. "]",
-            (selectedRow == 7 and editField == 6) and INVERS or 0)
-        lcd.drawText(86 + (#tostring(graphSeconds) + 2) * 6, line(5), "s", 0)
-        lcd.drawText(0, 49, "For Graph just 1 Sensor may", SMLSIZE)
-        lcd.drawText(0, 57, "be active on the left", SMLSIZE)
+        lcd.drawText(8, line(5), (selectedRow == 7) and "> Sensors" or "  Sensors",
+            selectedRow == 7 and INVERS or 0)
+        lcd.drawText(8, line(6), (selectedRow == 8) and "> Attitude" or "  Attitude",
+            selectedRow == 8 and INVERS or 0)
     elseif menuPage == 2 or menuPage == 3 then
         local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
+        local headerY = 8
+        lcd.drawText(4, headerY, "Name", INVERS + SMLSIZE)
+        lcd.drawText(27, headerY, "Sorce", INVERS + SMLSIZE)
+        lcd.drawText(52, headerY, "Unit", INVERS + SMLSIZE)
+        lcd.drawText(69, headerY, "Preci", INVERS + SMLSIZE)
+        lcd.drawText(94, headerY, "MM", INVERS + SMLSIZE)
+        lcd.drawText(108, headerY, "ON", INVERS + SMLSIZE)
         for i = first, last do
             local row = (menuPage == 2) and i or (i - 6)
-            local y = 10 + (row - 1) * 8
+            local y = 15 + (row - 1) * 7
             local selected = row == selectedRow
-            local prefix = selected and ">" or " "
-            lcd.drawText(1, y, prefix, 0)
             local editing = selected and editField > 0
             local fullName = padStr(editing and sName[i] or trim(sName[i]), SLOT_NAME_MAX)
             local name = string.sub(fullName, 1, SLOT_NAME_VISIBLE)
-            local source = editing and tostring(sSrc[i]) or trim(sSrc[i])
-            local unit = editing and tostring(sUnit[i]) or trim(sUnit[i])
-            local nameText, sourceText, unitText = name, source, unit
-            if selected and editField > 0 then
-                if editField == 1 then
-                    local start = math.max(1, math.min(editCharIdx - SLOT_NAME_VISIBLE + 1,
-                        SLOT_NAME_MAX - SLOT_NAME_VISIBLE + 1))
-                    local visible = string.sub(fullName, start, start + SLOT_NAME_VISIBLE - 1)
-                    nameText = editDisplay(visible, SLOT_NAME_VISIBLE, editCharIdx - start + 1)
-                elseif editField == 2 then
-                    sourceText = editDisplay(source, 4)
-                elseif editField == 3 then
-                    unitText = editDisplay(unit, 3)
-                end
+            local nameText = name
+            if selected and editField == 1 then
+                local start = math.max(1, math.min(editCharIdx - SLOT_NAME_VISIBLE + 1,
+                    SLOT_NAME_MAX - SLOT_NAME_VISIBLE + 1))
+                nameText = editDisplay(string.sub(fullName, start, start + SLOT_NAME_VISIBLE - 1),
+                    SLOT_NAME_VISIBLE, editCharIdx - start + 1)
             end
-            lcd.drawText(9, y, nameText, (selected and editField == 1) and INVERS or 0)
-            lcd.drawText(37, y, ":", 0)
-            lcd.drawText(45, y, sourceText, (selected and editField == 2) and INVERS or 0)
-            lcd.drawText(112, y, (sOn[i] == 1) and "[X]" or "[ ]",
+            lcd.drawText(0, y, selected and ">" or " ", SMLSIZE)
+            lcd.drawText(4, y, nameText, SMLSIZE + ((selected and editField == 1) and INVERS or 0))
+            lcd.drawText(27, y, trim(sSrc[i]),
+                SMLSIZE + ((selected and editField == 2) and INVERS or 0))
+            lcd.drawText(52, y, trim(sUnit[i]), SMLSIZE)
+            lcd.drawText(69, y, tostring(sPrecision[i]),
+                SMLSIZE + ((selected and editField == 3) and INVERS or 0))
+            lcd.drawText(92, y, "[M]",
                 SMLSIZE + ((selected and editField == 4) and INVERS or 0))
-            lcd.drawText(78, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
+            lcd.drawText(107, y, (sOn[i] == 1) and "[X]" or "[ ]",
+                SMLSIZE + ((selected and editField == 5) and INVERS or 0))
         end
         if menuPage == 3 then
-            local sourceRowY, enabledRowY = 34, 42
+            local sourceRowY, graphRowY, altimeterRowY = 36, 43, 50
             local sourceSelected = selectedRow == 4
-            local enabledSelected = selectedRow == 5
-            lcd.drawText(1, sourceRowY, sourceSelected and ">" or " ", sourceSelected and INVERS or 0)
-            lcd.drawText(9, sourceRowY, "    inside Horizon",
-                (sourceSelected and editField == 0) and INVERS or 0)
-            lcd.drawText(127, sourceRowY, " " .. insideSource .. " ",
-                RIGHT + ((sourceSelected and editField == 4) and INVERS or 0))
-            lcd.drawText(1, enabledRowY, enabledSelected and ">" or " ",
-                enabledSelected and INVERS or 0)
-            lcd.drawText(127, enabledRowY,
-                (insideEnabled == 1) and "is visible?:     [X]  " or "is visible?:     [ ]  ",
-                RIGHT + ((enabledSelected and editField == 0) and INVERS or 0))
+            lcd.drawText(0, sourceRowY, sourceSelected and ">" or " ", SMLSIZE)
+            lcd.drawText(1, sourceRowY, "inside Horiz:",
+                SMLSIZE + ((sourceSelected and editField == 4) and INVERS or 0))
+            lcd.drawText(68, sourceRowY, insideSource,
+                SMLSIZE + ((sourceSelected and editField == 4) and INVERS or 0))
+            lcd.drawText(105, sourceRowY, (insideEnabled == 1) and "[X]" or "[ ]",
+                SMLSIZE + ((sourceSelected and editField == 0) and INVERS or 0))
+            local graphSelected = selectedRow == 5
+            lcd.drawText(0, graphRowY, graphSelected and ">" or " ", SMLSIZE)
+            lcd.drawText(1, graphRowY, "Graph", SMLSIZE)
+            lcd.drawText(29, graphRowY, (graphEnabled == 1) and "[X]" or "[ ]",
+                SMLSIZE + ((graphSelected and editField == 0) and INVERS or 0))
+            lcd.drawText(48, graphRowY, "X-Time:", SMLSIZE)
+            lcd.drawText(91, graphRowY, "[" .. graphSeconds .. "]",
+                SMLSIZE + ((graphSelected and editField == 6) and INVERS or 0))
             local altimeterSelected = selectedRow == 6
-            lcd.drawText(8, 50, "Altimeter-Scale:",
-                ((altimeterSelected and editField == 0) and INVERS or 0))
-            local altimeterText = padStr((altimeterSelected and editField == 5) and altimeterSource or
-                trim(altimeterSource), 4)
-            for i = 1, 4 do
-                local flags = (altimeterSelected and editField == 5 and editCharIdx == i) and INVERS or 0
-                lcd.drawText(104 + (i - 1) * 6, 50, string.sub(altimeterText, i, i), flags)
+            lcd.drawText(0, altimeterRowY, altimeterSelected and ">" or " ", SMLSIZE)
+            lcd.drawText(1, altimeterRowY, "Altimeter-Scale:",
+                SMLSIZE + ((altimeterSelected and editField == 5) and INVERS or 0))
+            lcd.drawText(83, altimeterRowY, altimeterSource,
+                SMLSIZE + ((altimeterSelected and editField == 5) and INVERS or 0))
+            if selectedRow == 4 then
+                lcd.drawText(8, 56, "Graph: 1 sensor", SMLSIZE)
             end
         end
     else
@@ -711,18 +781,14 @@ local function drawMenu(event)
         end
         if selectedRow ~= 6 then
             if calibrationMessage ~= "" then
-                lcd.drawText(1, 50, calibrationMessage, SMLSIZE)
+                lcd.drawText(9, 56, calibrationMessage, SMLSIZE)
             elseif axisMessage ~= "" then
                 lcd.drawText(1, 50, axisMessage, SMLSIZE)
             end
         end
     end
     local scrollSelected = selectedRow > menuContentRows()
-    -- Auf Seite 1 steht statt des Leerzeichens das "b" des Hinweistextes (wegen platzmangel so gelöst)
-    lcd.drawText(scrollSelected and 1 or ((menuPage == 1) and 0 or 1),
-        (menuPage == 1 and not scrollSelected) and 57 or 58,
-        scrollSelected and ">" or ((menuPage == 1) and "b" or " "),
-        scrollSelected and INVERS or ((menuPage == 1) and SMLSIZE or 0))
+    lcd.drawText(1, 58, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
     lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
         (scrollSelected and INVERS or 0))
 end
@@ -730,11 +796,15 @@ end
 local function init()
     menuActive, menuPage, selectedRow = false, 1, 1
     editField, editCharIdx, menuOpenTime = 0, 1, 0
+    mmEditSlot, mmReturnPage, mmReturnRow = nil, 1, 1
     axisEditing = false
     calibrationStep, calibrationLevel, calibrationMessage = 0, nil, ""
     axisMessage, configSaveFailed = "", false
     configLoadWarning = false
     configLoaded = false
+    sessionMin, sessionMax, sessionSource = {}, {}, {}
+    sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
+        {}, 0, 0, 0, 0, nil, 0
 end
 
 local function readSlot(source, unit)
@@ -897,6 +967,11 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
         local a = -math.sin(rollRad) * math.cos(p)
         local b = math.cos(rollRad) * math.cos(p)
         local c = -focal * math.sin(p)
+        if dotted and math.abs(a) < 0.0001 and math.abs(b) < 0.0001 then
+            local y = (angle > pitch) and top or bottom
+            for x = left, right, 2 do lcd.drawPoint(x, y) end
+            return
+        end
         local points = {}
         local function addPoint(x, y)
             if x >= left - 0.01 and x <= right + 0.01 and
@@ -965,6 +1040,8 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     planeLine(pitch, false)
     planeLine(pitch - 45, true)
     planeLine(pitch + 45, true)
+    planeLine(pitch - 90, true)
+    planeLine(pitch + 90, true)
 
     -- Dezente 45°- und 90°-Marken mit beweglicher Pitch-/Roll-Anzeige.
     local pitchMarks = { -90, -45, 0, 45, 90 }
@@ -993,8 +1070,6 @@ end
 
 -- Linke Spalte (Slots 1..6): passt sich der Zahl aktiver Slots an
 local leftActive = {}
-local SPARK_N = 40 -- Abtastintervall = graphSeconds / SPARK_N
-local sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval = {}, 0, 0, 0, 0, nil, 0
 local FONTS_BIG = { { MIDSIZE, 8 }, { 0, 6 }, { SMLSIZE, 5 } }
 local FONTS_NORMAL = { { 0, 6 }, { SMLSIZE, 5 } }
 
@@ -1028,11 +1103,13 @@ local function drawBigValue(x, y, both, value, unit, limit)
     end
 end
 
-local function drawSparkline(x0, y0, x1, y1)
-    local lo, hi = sparkBuf[1], sparkBuf[1]
-    for i = 2, sparkCount do
-        local v = sparkBuf[i]
-        if v < lo then lo = v elseif v > hi then hi = v end
+local function drawSparkline(x0, y0, x1, y1, lo, hi)
+    if lo == nil or hi == nil then
+        lo, hi = sparkBuf[1], sparkBuf[1]
+        for i = 2, sparkCount do
+            local v = sparkBuf[i]
+            if v < lo then lo = v elseif v > hi then hi = v end
+        end
     end
     lcd.drawLine(x0, y1, x1, y1, SOLID, FORCE)
     if sparkCount < 2 then return end
@@ -1041,7 +1118,8 @@ local function drawSparkline(x0, y0, x1, y1)
     local px, py
     for k = 0, sparkCount - 1 do
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
-        local y = (span == 0) and (y0 + h / 2) or (y1 - 1 - (v - lo) / span * h)
+        local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
+        local y = y1 - 1 - ratio * h
         local x = x0 + k
         if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
         px, py = x, y
@@ -1095,6 +1173,14 @@ local function drawLeftColumn()
         local name, both, value, unit = text(1)
         drawName(1, 1, name, 33)
         drawBigValue(1, 15, both, value, unit, 43)
+        if graphEnabled ~= 1 then
+            sparkCount, sparkHead, sparkSlot = 0, 0, 0
+            local low = sessionMin[i] or slotValues[i]
+            local high = sessionMax[i] or slotValues[i]
+            lcd.drawText(1, 36, "Max:" .. string.format("%." .. sPrecision[i] .. "f", high), SMLSIZE)
+            lcd.drawText(1, 51, "Min:" .. string.format("%." .. sPrecision[i] .. "f", low), SMLSIZE)
+            return
+        end
         local interval = math.floor(graphSeconds * 100 / SPARK_N)
         if sparkSlot ~= i or sparkSrc ~= sSrc[i] or sparkInterval ~= interval then
             sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
@@ -1107,7 +1193,21 @@ local function drawLeftColumn()
             sparkHead = (sparkHead + 1) % SPARK_N
             if sparkCount < SPARK_N then sparkCount = sparkCount + 1 end
         end
-        drawSparkline(1, 34, 43, 60)
+        local graphLow, graphHigh
+        if sMin[i] ~= 0 or sMax[i] ~= 0 then
+            graphLow, graphHigh = sMin[i], sMax[i]
+            if graphLow == 0 then
+                graphLow = math.min(sessionMin[i] or (graphHigh - 1), graphHigh - 1)
+            elseif graphHigh == 0 then
+                graphHigh = math.max(sessionMax[i] or (graphLow + 1), graphLow + 1)
+            end
+            if graphHigh <= graphLow then graphHigh = graphLow + 1 end
+        end
+        drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
+        if graphLow ~= nil then
+            lcd.drawText(1, 34, string.format("%." .. sPrecision[i] .. "f", graphHigh), SMLSIZE)
+            lcd.drawText(1, 54, string.format("%." .. sPrecision[i] .. "f", graphLow), SMLSIZE)
+        end
     end
 end
 
@@ -1136,7 +1236,16 @@ local function run(event)
         return 0
     end
 
-    for i = 1, 9 do slotValues[i], slotFormats[i] = readSlot(trim(sSrc[i]), sUnit[i]) end
+    for i = 1, 9 do
+        slotValues[i] = readSlot(trim(sSrc[i]), sUnit[i])
+        slotFormats[i] = "%." .. sPrecision[i] .. "f"
+        local source = trim(sSrc[i])
+        if sessionSource[i] ~= source then
+            sessionSource[i], sessionMin[i], sessionMax[i] = source, nil, nil
+        end
+        sessionMin[i] = math.min(sessionMin[i] or slotValues[i], slotValues[i])
+        sessionMax[i] = math.max(sessionMax[i] or slotValues[i], slotValues[i])
+    end
     filteredAlt = slotValues[2] * 0.25 + filteredAlt * 0.75
     local pitch, roll = getAttitude()
     local rawHdg = (tonumber(getValue("Hdg")) or 0) * ((invHdg == 1) and -1 or 1)
@@ -1215,7 +1324,7 @@ local function run(event)
         local blinkOn = (now % 80) < 60
         local satsX = cx - sizeW - 7
         if (fix ~= 1 or blinkOn) and (not warningActive or blinkOn) then
-            drawSatellite(satsX - 8, cy - sizeH - 5, fix)
+            drawSatellite(cx - sizeW + 1, cy - sizeH + 1, fix)
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
         lcd.drawText(satsX + 1, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
@@ -1260,8 +1369,8 @@ local function run(event)
             end
         end
     end
-    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "°Y", SMLSIZE + RIGHT)
-    lcd.drawText(128, 58, string.format("%.0f", roll) .. "°X", SMLSIZE + RIGHT)
+    lcd.drawText(127, 51, string.format("%.0f", pitch) .. DEGREE .. "P", SMLSIZE + RIGHT)
+    lcd.drawText(128, 58, string.format("%.0f", roll) .. DEGREE .. "R", SMLSIZE + RIGHT)
     if configSaveFailed then
         lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
     elseif configLoadWarning then

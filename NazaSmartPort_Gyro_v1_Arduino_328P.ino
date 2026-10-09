@@ -10,6 +10,7 @@
 //                                                                                                         
 
 #include <Arduino.h>
+#include <math.h>
 #include <Wire.h>
 #include <FrSkySportSensor.h>
 #include <FrSkySportSensorGps.h>
@@ -178,12 +179,18 @@ void loop() {
   while (Serial.available() > 0) {
     uint8_t msgType = naza.decode(Serial.read());
     if (msgType == NazaDecoder::NAZA_MESSAGE_GPS_TYPE) {
-      gpsSensor.setData(naza.getLatitude(), naza.getLongitude(), naza.getAltitude(),
-                        naza.getSpeed(), naza.getHeading(), naza.getYear(),
-                        naza.getMonth(), naza.getDay(), naza.getHour(),
-                        naza.getMinute(), naza.getSecond());
-      varioSensor.setData(naza.getAltitude(), naza.getVerticalSpeedIndicator());
       rpmSensor.setData(0, (float)naza.getSatellites(), (float)naza.getFixType());
+      const float latitude = naza.getLatitude();
+      const float longitude = naza.getLongitude();
+      const float altitude = naza.getAltitude();
+      if (naza.getFixType() >= 2 && isfinite(latitude) && isfinite(longitude) &&
+          isfinite(altitude) && fabs(latitude) <= 90.0f && fabs(longitude) <= 180.0f &&
+          altitude <= 3000.0f) {
+        gpsSensor.setData(latitude, longitude, altitude, naza.getSpeed(), naza.getHeading(),
+                          naza.getYear(), naza.getMonth(), naza.getDay(), naza.getHour(),
+                          naza.getMinute(), naza.getSecond());
+        varioSensor.setData(altitude, naza.getVerticalSpeedIndicator());
+      }
       digitalWrite(LED_BUILTIN, HIGH);
       ledPulseStart = millis();
     }

@@ -43,22 +43,23 @@ RPM itself can be deleted later. Simply rename T1+T2 to "Sats" and "GFix".
 - For the Archer mounted on its side, use these start values: `fwd=X+`, `side=Z-`, `down=Y+`: nose down gives `AccX+`, lower right gives `AccZ+`, and down is `AccY+`. 
 When using the Gyro-Arduino sketch, set these Lua axes in the menu to `fwd=X+`, `side=Y+`, `down=Z-`; this is not the Archer default setting. Pitch/Roll are not mixed with raw axes; Heading remains `Hdg` from the Naza.
 
-- In the sensor menu, `+/-` cycles through sources for slot entries; the rotary encoder edits individual characters.
-Short ENTER jumps through characters during editing; holding ENTER skips the current field and goes directly to the next one. Empty spaced will be chopped. The checkmark selects if a sensor is visible or not.
+- The Config page links to `Sensors` (sensor pages) and `Attitude` (the existing axis settings). Sensor pages 1/2 contain slots 1–6 and 7–9 plus the inside-horizon, graph, and altimeter settings. Slot sources, Pitch/Roll, inside-horizon, and Altimeter-Scale are selected from the catalog; an empty source is available. The slot name remains editable, and selecting a source also selects its catalog unit.
+- Sensor rows expose precision (0–4 decimals), `MM` for a temporary MIN/MAX editor, and the visibility checkbox. ENTER starts editing; holding ENTER skips to the next editable field, and ENTER on `MM` opens its editor. `+/-` and the rotary encoder change catalog sources and precision. The graph is enabled by default. In the one-sensor view, `MIN=0` and `MAX=0` keep automatic scaling; configured limits are shown without units. If only one limit is set, the other edge follows the current session extreme (with at least a one-unit span); an inverted/equal pair is defensively displayed with a one-unit span.
 
 - NEW: If you have only 1 to 5 sensors active instead of all 6 (this is for the left side only) the space between the fields and the font-size will be adjusted automatically.
 
-- NEW: If you only have one Sensor visible (on the left) a little Graph Field will show the value of this Sensor. The x-Time is adjustable from 10-999 seconds. 
+- If graph display is disabled, the one-sensor field shows the current session minimum and maximum instead; these extrema reset when the Lua script starts. Graph X-Time remains adjustable from 10–999 seconds.
 
-- On sensor page 2, `Altimeter-Scale` can be entered separately and manually (default `Alt`); this source controls the 2.5-m/5-m altitude marks on the left edge of the box in both views. On page 4 (`Axis Settings`), `View` toggles the 3D attitude display 3D/Classic; `Attitude` selects the attitude source and `Calibrate` starts vector calibration.
+- `Altimeter-Scale` (default `Alt`) controls the 2.5-m/5-m altitude marks at the left edge of the horizon box. On the axis settings page, `View` toggles 3D/Classic; `Attitude` selects the attitude source and `Calibrate` starts vector calibration. In `VECTOR` mode, Pitch/Roll sources are disabled because the vector axes provide attitude.
 
-- 3D view shows subtle two-sided scales at 45°/90° angles; the compass bar and filled home arrow remain. `View` can be switched back to the classic horizon view at any time. The 3D mode also works with the corrected `Ptch`/`Roll` values (`ANGLES`); raw values of all three acceleration axes are only needed in `VECTOR` mode.
+- 3D view shows dotted attitude lines at ±45° and ±90°; the compass bar and filled home arrow remain. `View` can be switched back to the classic horizon view at any time. The 3D mode also works with the corrected `Ptch`/`Roll` values (`ANGLES`); raw values of all three acceleration axes are only needed in `VECTOR` mode.
 
-- The display in the horizon center can be switched to a catalog sensor on menu page 3 under `inside Horizon` and turned off with `is visible?`. By default it is active and displays `Alt`.
+- The display in the horizon center can be switched to a catalog sensor on the second sensor page under `inside Horizon` and turned off with its checkbox. By default it is active and displays `Alt`.
 
 - Next to the satellite count, the main view shows a 10×10-pixel symbol: without GPS fix, the symbol and number are hidden; from fix 1, the satellite base blinks; with 2D/3D fix, signal rays are added. After more than 10 seconds of stable 3D fix, the symbol blinks for one minute if it drops to fix 2 or below for longer than 3 seconds.
 
 - The home arrow is set from the GPS position on the first valid 3D fix after Lua start and points relative to `Hdg` to the starting position. The direction is marked within the visible compass scale; outside the scale, an arrow on the left or right edge points in the appropriate direction. Below 5 m distance it is hidden due to GPS position noise; after a Lua restart, home is reset.
+- Arduino GPS position, altitude, and vario updates are accepted only from a valid 2D-or-better fix and valid coordinates; altitudes above 3000 m are ignored.
 
 - The sketch waits 25 seconds after power-on before reading MPU data. It then averages the gyro offset for about one second; the model must be stationary during this measurement. The attitude is then initialized from the actual acceleration direction – a tilted power-on position is not subtracted as zero position.
 
@@ -145,25 +146,25 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 - Für den seitlich montierten Archer passen als Startwert `fwd=X+`, `side=Z-`, `down=Y+`: Nase abwärts ergibt `AccX+`, rechts unten `AccZ+`, und unten ist `AccY+`. 
 Bei Verwendung des Gyro-Arduino-Sketches diese Lua-Achsen im Menü auf `fwd=X+`, `side=Y+`, `down=Z-` einstellen; das ist nicht die Archer-Voreinstellung. Pitch/Roll werden nicht mit Rohachsen vermischt; Heading bleibt `Hdg` von der Naza.
 
-- Im Sensor-Menü schalten `+/-` bei Slot-Quellen durch den Katalog; der Drehgeber bearbeitet einzelne Zeichen.
-Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspringt das aktuelle Feld und führt direkt zum nächsten. Leerbereiche werden entfernt. Über das Kontrollkästchen lässt sich die Sichtbarkeit des jeweiligen Sensors steuern.
+- Die Config-Seite verlinkt auf `Sensors` (Sensorseiten) und `Attitude` (die bestehende Axis-Settings-Seite). Sensorseite 1/2 enthält die Slots 1–6 und 7–9 sowie inside-Horizon-, Graph- und Altimeter-Einstellungen. Slot-, Pitch/Roll-, inside-Horizon- und Altimeter-Scale-Quellen werden aus dem Katalog gewählt; eine leere Quelle ist verfügbar. Der Slotname bleibt editierbar, und bei einer Quellenauswahl wird auch die Katalogeinheit übernommen.
+- Sensorzeilen bieten Präzision (0–4 Nachkommastellen), `MM` für eine temporäre MIN/MAX-Seite und die Sichtbarkeits-Checkbox. ENTER startet die Bearbeitung; langes ENTER springt zum nächsten bearbeitbaren Feld, ENTER auf `MM` öffnet den Editor. `+/-` und Drehgeber ändern Katalogquelle und Präzision. Der Graph ist standardmäßig aktiv. Bei genau einem Sensor bleibt mit `MIN=0` und `MAX=0` die automatische Skalierung aktiv; gesetzte Grenzen werden ohne Einheit angezeigt. Ist nur eine Grenze gesetzt, folgt die andere dem aktuellen Session-Extrem (mindestens ein Einheitsschritt Abstand); ein vertauschtes/gleiches Paar wird defensiv mit einem Einheitsschritt dargestellt.
 
 - NEU: Wenn anstelle aller sechs Sensoren nur zw. 1 bis 5 aktiv sind (dies gilt nur für die linke Seite), werden der Abstand zwischen den Feldern sowie die Schriftgröße automatisch angepasst.
 
-- NEU: Ist nur ein Sensor (auf der linken Seite) aktiv, wird dessen Messwert in einem kleinen Graphen angezeigt. Die Zeitache X ist von 10-999 Sekunden einstellbar.
+- Ist der Graph deaktiviert, zeigt das Ein-Sensor-Feld stattdessen Session-Minimum und -Maximum; diese Werte werden beim Start des Lua-Skripts zurückgesetzt. Graph X-Time ist weiterhin von 10–999 Sekunden einstellbar.
 
-- Auf Sensorseite 2 lässt sich `Altimeter-Scale` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert in beiden Ansichten die 2,5-m-/5-m-Höhenstriche am linken Boxrand. Auf Seite 4 (`Axis Settings`) schaltet `View` die 3D-Lageansicht 3D/Classic; `Attitude` wählt die Lagequelle und `Calibrate` startet die Vektorkalibrierung.
+- `Altimeter-Scale` (Standard `Alt`) steuert die 2,5-m-/5-m-Höhenstriche links an der Horizontbox. Auf der Axis-Settings-Seite schaltet `View` 3D/Classic um; `Attitude` wählt die Lagequelle und `Calibrate` startet die Vektorkalibrierung. Im `VECTOR`-Modus sind Pitch/Roll-Quellen deaktiviert, da die Vektorachsen die Lage liefern.
 
-- 3D-View zeigt dezente, beidseitige Skalen 45°-/90°-Lagen; die Kompassleiste und der gefüllte Home-Pfeil bleiben erhalten. `View` kann jederzeit auf die klassische Horizontansicht zurückgestellt werden. Der 3D-Modus funktioniert auch mit den korrigierten `Ptch`/`Roll`-Werten (`ANGLES`); Rohwerte aller drei Beschleunigungsachsen werden nur im `VECTOR`-Modus benötigt.
+- 3D-View zeigt gestrichelte Lage-Linien bei ±45° und ±90°; Kompassleiste und gefüllter Home-Pfeil bleiben erhalten. `View` kann jederzeit auf die klassische Horizontansicht zurückgestellt werden. Der 3D-Modus funktioniert auch mit den korrigierten `Ptch`/`Roll`-Werten (`ANGLES`); Rohwerte aller drei Beschleunigungsachsen werden nur im `VECTOR`-Modus benötigt.
 
-- Die Anzeige in der Horizontmitte lässt sich auf Menüseite 3 unter `inside Horizon` auf einen Katalogsensor umstellen und mit `is visible?` abschalten. Standardmäßig ist sie aktiv und zeigt `Alt`.
+- Die Anzeige in der Horizontmitte lässt sich auf der zweiten Sensorseite unter `inside Horizon` auf einen Katalogsensor umstellen und mit der Checkbox abschalten. Standardmäßig ist sie aktiv und zeigt `Alt`.
 
 - Neben der Satellitenzahl zeigt die Hauptansicht ein 10×10-Pixelsymbol: ohne GPS-Fix werden Symbol und Zahl ausgeblendet, ab Fix 1 blinkt die Satellitenbasis, bei 2D/3D-Fix kommen Signalstrahlen hinzu. Nach mehr als 10 Sekunden stabilem 3D-Fix blinkt das Symbol bei einem Einbruch auf Fix 2 oder darunter (länger als 3 Sekunden) eine Minute lang.
 
 - Der Home-Pfeil wird beim ersten gültigen 3D-Fix nach Lua-Start aus der GPS-Position gesetzt und zeigt relativ zum `Hdg` zur Startposition. Die Richtung wird innerhalb der sichtbaren Kompassskala markiert, außerhalb weist ein Pfeil am linken oder rechten Rand in die passende Richtung. Unter 5 m Abstand wird er wegen GPS-Positionsrauschen ausgeblendet; nach einem Lua-Neustart wird Home neu gesetzt.
+- Das Arduino-Sketch übernimmt GPS-Position, Höhe und Vario nur bei gültigem Fix ab 2D und gültigen Koordinaten; Höhen über 3000 m werden ignoriert.
 
 - Der Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
 
 
 -- Beispiel Bilder: siehe oben
-
