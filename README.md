@@ -44,7 +44,11 @@ RPM itself can be deleted later. Simply rename T1+T2 to "Sats" and "GFix".
 When using the Gyro-Arduino sketch, set these Lua axes in the menu to `fwd=X+`, `side=Y+`, `down=Z-`; this is not the Archer default setting. Pitch/Roll are not mixed with raw axes; Heading remains `Hdg` from the Naza.
 
 - In the sensor menu, `+/-` cycles through sources for slot entries; the rotary encoder edits individual characters.
-Short ENTER jumps through characters during editing; holding ENTER skips the current field and goes directly to the next one.
+Short ENTER jumps through characters during editing; holding ENTER skips the current field and goes directly to the next one. Empty spaced will be chopped. The checkmark selects if a sensor is visible or not.
+
+- NEW: If you have only 1 to 5 sensors active instead of all 6 (this is for the left side only) the space between the fields and the font-size will be adjusted automatically.
+
+- NEW: If you only have one Sensor visible (on the left) a little Graph Field will show the value of this Sensor. The x-Time is adjustable from 10-999 seconds. 
 
 - On sensor page 2, `Altimeter-Scale` can be entered separately and manually (default `Alt`); this source controls the 2.5-m/5-m altitude marks on the left edge of the box in both views. On page 4 (`Axis Settings`), `View` toggles the 3D attitude display 3D/Classic; `Attitude` selects the attitude source and `Calibrate` starts vector calibration.
 
@@ -142,7 +146,11 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 Bei Verwendung des Gyro-Arduino-Sketches diese Lua-Achsen im Menü auf `fwd=X+`, `side=Y+`, `down=Z-` einstellen; das ist nicht die Archer-Voreinstellung. Pitch/Roll werden nicht mit Rohachsen vermischt; Heading bleibt `Hdg` von der Naza.
 
 - Im Sensor-Menü schalten `+/-` bei Slot-Quellen durch den Katalog; der Drehgeber bearbeitet einzelne Zeichen.
-Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspringt das aktuelle Feld und führt direkt zum nächsten.
+Kurzes ENTER springt beim Bearbeiten durch die Zeichen; ENTER halten überspringt das aktuelle Feld und führt direkt zum nächsten. Leerbereiche werden entfernt. Über das Kontrollkästchen lässt sich die Sichtbarkeit des jeweiligen Sensors steuern.
+
+- NEU: Wenn anstelle aller sechs Sensoren nur zw. 1 bis 5 aktiv sind (dies gilt nur für die linke Seite), werden der Abstand zwischen den Feldern sowie die Schriftgröße automatisch angepasst.
+
+- NEU: Ist nur ein Sensor (auf der linken Seite) aktiv, wird dessen Messwert in einem kleinen Graphen angezeigt. Die Zeitache X ist von 10-999 Sekunden einstellbar.
 
 - Auf Sensorseite 2 lässt sich `Altimeter-Scale` separat und manuell eingeben (Standard `Alt`); diese Quelle steuert in beiden Ansichten die 2,5-m-/5-m-Höhenstriche am linken Boxrand. Auf Seite 4 (`Axis Settings`) schaltet `View` die 3D-Lageansicht 3D/Classic; `Attitude` wählt die Lagequelle und `Calibrate` startet die Vektorkalibrierung.
 
