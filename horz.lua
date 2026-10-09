@@ -69,7 +69,7 @@ local headingLabels = {
     [0] = "N", [45] = "NO", [90] = "O", [135] = "SO",
     [180] = "S", [225] = "SW", [270] = "W", [315] = "NW"
 }
-local allowedChars = " aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*() "  --Leerzeichen am Anfang (null-Abstand) und am Ende; Zeichenwahl ohne Endlosscrollen
+local allowedChars = " aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*°%/() "  --Leerzeichen am Anfang/Ende (null-Abstand)
 
 local function trim(str)
     if not str then return "" end
@@ -200,7 +200,7 @@ local function loadConfig()
 end
 
 local function saveConfig()
-    -- Leerzeichen am Rand werden erst beim Beenden der Eingabe entfernt
+    -- Leerzeichen am Rand werden beim Beenden der Eingabe entfernt
     pitchSource, rollSource, altimeterSource = trim(pitchSource), trim(rollSource), trim(altimeterSource)
     for i = 1, 9 do sName[i], sSrc[i], sUnit[i] = trim(sName[i]), trim(sSrc[i]), trim(sUnit[i]) end
     local f = io.open(modelPath(), "w")
@@ -235,7 +235,6 @@ local charPos, charPosKey = 0, ""
 local function changeChar(text, index, delta)
     local char = string.sub(text, index, index)
     local position = string.find(allowedChars, char, 1, true) or 1
-    -- Leerzeichen gibt es am Anfang und am Ende der Liste: gemerkte Position nutzen
     local key = menuPage .. ":" .. selectedRow .. ":" .. editField .. ":" .. index
     if char == " " and charPosKey == key and string.sub(allowedChars, charPos, charPos) == " " then
         position = charPos
@@ -589,7 +588,7 @@ local function drawMenu(event)
             lcd.drawText(104, y, on and "[X]" or "[ ]", selected and INVERS or 0)
         end
         lcd.drawText(1, line(1), " ", 0)
-        lcd.drawText(8, line(1), "Ground:", (selectedRow == 1) and INVERS or 0)
+        lcd.drawText(8, line(1), "Ground as:", (selectedRow == 1) and INVERS or 0)
         lcd.drawText(73, line(1), ({ "White", "Lines", "Points" })[groundMode + 1], 0)
         for k = 0, 1 do
             local item, y = 2 + k * 2, line(2 + k)
@@ -687,7 +686,7 @@ local function drawMenu(event)
         end
     end
     local scrollSelected = selectedRow > menuContentRows()
-    -- Auf Seite 1 steht statt des Leerzeichens das "b" des Hinweistextes
+    -- Auf Seite 1 steht statt des Leerzeichens das "b" des Hinweistextes (wegen platzmangel so gelöst)
     lcd.drawText(scrollSelected and 1 or ((menuPage == 1) and 0 or 1), (menuPage == 1 and not scrollSelected) and 57 or 58,
         scrollSelected and ">" or ((menuPage == 1) and "b" or " "),
         scrollSelected and INVERS or ((menuPage == 1) and SMLSIZE or 0))
@@ -968,7 +967,6 @@ local function pickFont(text, limit, fonts)
     return SMLSIZE
 end
 
--- Name gross zeichnen; passt "name:" nicht, zuerst Doppelpunkt weglassen
 local function drawName(x, y, name, limit)
     if #name * 8 + 8 <= limit then
         lcd.drawText(x, y, name .. ":", MIDSIZE)
@@ -1175,15 +1173,13 @@ local function run(event)
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
         lcd.drawText(satsX + 1 , cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
     end
-    --lcd.drawText(cx + sizeW - 1, cy - sizeH + 2, fix == 3 and "3D" or (fix == 2 and "2D" or "nF"), SMLSIZE + RIGHT)  --rausgenommen aus horiz.box, da jetzt mit satelliten symbol gelöst
     if insideEnabled == 1 then
         local entry = catalogByName[string.lower(trim(insideSource))]
         local insideUnit = entry and entry[4] or ""
         local insideValue, insideFormat = readSlot(trim(insideSource), insideUnit)
         if string.lower(trim(insideSource)) == "alt" then insideValue = filteredAlt end
         local insideName = entry and entry[1] or trim(insideSource)
-        lcd.drawText(cx, cy - 13, insideName .. ":" ..
-            string.format(insideFormat, insideValue) .. insideUnit, SMLSIZE + CENTER)
+        lcd.drawText(cx, cy - 13, string.format(insideFormat, insideValue) .. insideUnit, SMLSIZE + CENTER)
     end
 
     local yBottom = cy - sizeH - 1
