@@ -44,6 +44,7 @@ local defaults = {
     units = { "dB", "m", "m/s", "kmh", "m", "°", "V", "V", "A" }
 }
 local sName, sSrc, sUnit = {}, {}, {}
+local sOn = {} -- Slot sichtbar (1) / abgeschaltet (0), Namen bleiben erhalten
 
 local catalog = {
     { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
@@ -97,6 +98,7 @@ local function setDefaults()
     fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
     for i = 1, 9 do
         sName[i], sSrc[i], sUnit[i] = defaults.names[i], defaults.sources[i], defaults.units[i]
+        sOn[i] = 1
     end
 end
 
@@ -163,6 +165,10 @@ local function loadConfig()
                         end
                     elseif key == "ALTIMETER-SCALE" and validText(value, 4) then
                         altimeterSource = value
+                    elseif key == "SLOTON" then
+                        if string.match(value, "^[01]+$") and #value == 9 then
+                            for i = 1, 9 do sOn[i] = tonumber(string.sub(value, i, i)) end
+                        end
                     elseif key == "GRAPHTIME" then
                         local secs = tonumber(value)
                         if secs and secs % 1 == 0 and secs >= 10 and secs <= 999 then
@@ -210,6 +216,9 @@ local function saveConfig()
     io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
     io.write(f, "INSIDE=" .. insideSource .. "," .. insideEnabled .. "\n")
     io.write(f, "ALTIMETER-SCALE=" .. trim(altimeterSource) .. "\n")
+    local on = ""
+    for i = 1, 9 do on = on .. sOn[i] end
+    io.write(f, "SLOTON=" .. on .. "\n")
     io.write(f, "GRAPHTIME=" .. graphSeconds .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
     for i = 1, 9 do
@@ -343,6 +352,16 @@ local function handleMenu(event)
             end
             return true
         end
+        if editField == 4 and menuPage ~= 1 then
+            local slot = slotIndex()
+            if negative or positive or event == EVT_ENTER_BREAK then
+                sOn[slot] = 1 - sOn[slot]
+            elseif event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
+                editField = 0
+                saveConfig()
+            end
+            return true
+        end
         local text, maxLen, target
         if menuPage == 1 then
             if selectedRow == 2 then
@@ -379,14 +398,14 @@ local function handleMenu(event)
         elseif event == EVT_ENTER_LONG then
             editCharIdx = 1
             editField = editField + 1
-            local final = (menuPage == 1) and 1 or 3
+            local final = (menuPage == 1) and 1 or 4
             if editField > final then editField = 0; saveConfig() end
         elseif event == EVT_ENTER_BREAK then
             editCharIdx = editCharIdx + 1
             if editCharIdx > maxLen then
                 editCharIdx = 1
                 editField = editField + 1
-                local final = (menuPage == 1) and 1 or 3
+                local final = (menuPage == 1) and 1 or 4
                 if editField > final then editField = 0; saveConfig() end
             end
         elseif event == EVT_EXIT_BREAK then
@@ -614,11 +633,13 @@ local function drawMenu(event)
                     local visible = string.sub(fullName, start, start + SLOT_NAME_VISIBLE - 1)
                     nameText = editDisplay(visible, SLOT_NAME_VISIBLE, editCharIdx - start + 1)
                 elseif editField == 2 then sourceText = editDisplay(source, 4)
-                else unitText = editDisplay(unit, 3) end
+                elseif editField == 3 then unitText = editDisplay(unit, 3) end
             end
             lcd.drawText(9, y, nameText, (selected and editField == 1) and INVERS or 0)
             lcd.drawText(37, y, ":", 0)
             lcd.drawText(45, y, sourceText, (selected and editField == 2) and INVERS or 0)
+            lcd.drawText(112, y, (sOn[i] == 1) and "[X]" or "[ ]",
+                SMLSIZE + ((selected and editField == 4) and INVERS or 0))
             lcd.drawText(78, y, "[" .. unitText .. "]", (selected and editField == 3) and INVERS or 0)
         end
         if menuPage == 3 then
@@ -666,7 +687,10 @@ local function drawMenu(event)
         end
     end
     local scrollSelected = selectedRow > menuContentRows()
-    lcd.drawText(1, 58, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
+    -- Auf Seite 1 steht statt des Leerzeichens das "b" des Hinweistextes
+    lcd.drawText(scrollSelected and 1 or ((menuPage == 1) and 0 or 1), (menuPage == 1 and not scrollSelected) and 57 or 58,
+        scrollSelected and ">" or ((menuPage == 1) and "b" or " "),
+        scrollSelected and INVERS or ((menuPage == 1) and SMLSIZE or 0))
     lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
         (scrollSelected and INVERS or 0))
 end
@@ -988,7 +1012,7 @@ end
 local function drawLeftColumn()
     local n = 0
     for i = 1, 6 do
-        if string.sub(trim(sName[i]), 1, 4) ~= "" then
+        if sOn[i] == 1 and string.sub(trim(sName[i]), 1, 4) ~= "" then
             n = n + 1
             leftActive[n] = i
         end
@@ -1184,7 +1208,7 @@ local function run(event)
     drawLeftColumn()
     for i = 7, 9 do
         local name, unit = string.sub(trim(sName[i]), 1, 4), trim(sUnit[i])
-        if name ~= "" then
+        if sOn[i] == 1 and name ~= "" then
             local value = string.format(slotFormats[i], slotValues[i])
             do
                 local row = i - 7
