@@ -1,5 +1,5 @@
 -- LUA: Horizont & Telemetrie Sensor Display for FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 08.Okt.2026
---> Das LUA Script ist entsanden beim Projekt github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
+--> Das LUA Script ist entstanden beim Projekt github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
 
 local invPitch, invRoll, invHdg = 0, 0, 0
 local groundMode, attitudeMode, viewMode = 0, 1, 1
