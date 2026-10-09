@@ -21,7 +21,7 @@ local gpsFix3Since, gpsLowFixSince, gpsWarningSince = nil, nil, nil
 local menuActive, menuPage, selectedRow = false, 1, 1
 local selectedColumn = 1
 local editField, editCharIdx, menuOpenTime = 0, 1, 0
-local mmEditSlot, mmReturnPage, mmReturnRow = nil, 1, 1
+local mmEditSlot, mmRow = nil, 1
 local calibrationStep, calibrationLevel = 0, nil
 local calibrationMessage = ""
 local axisMessage = ""
@@ -84,8 +84,10 @@ local headingLabels = {
     [270] = "W",
     [315] = "NW"
 }
+local DEGREE_UTF8 = "°"
 local allowedChars =
-" aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*°%/() " -- Leerzeichen am Anfang/Ende (Null-Abstand)
+" aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*" ..
+DEGREE_UTF8 .. "%/() " -- Leerzeichen am Anfang/Ende (Null-Abstand)
 
 local function trim(str)
     if not str then return "" end
@@ -131,7 +133,7 @@ local function validText(value, maxLen)
     local i, charCount = 1, 0
     while i <= #value do
         local char = string.sub(value, i, i + 1)
-        if char == "°" then
+        if char == DEGREE_UTF8 then
             i = i + 2
         else
             local byte = string.byte(value, i)
@@ -385,12 +387,12 @@ local function handleMenu(event)
         (EVT_RIGHT ~= nil and event == EVT_RIGHT) or
         (EVT_VIRTUAL_RIGHT ~= nil and event == EVT_VIRTUAL_RIGHT)
     if mmEditSlot then
-        if (negative or positive) and selectedRow <= 2 then
+        if (negative or positive) and mmRow <= 2 then
             local rotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
                 event == EVT_VIRTUAL_PREV or event == EVT_VIRTUAL_NEXT
             local step = 10 ^ -sPrecision[mmEditSlot]
             if not rotary then step = step * 10 end
-            local target = (selectedRow == 1) and sMin or sMax
+            local target = (mmRow == 1) and sMin or sMax
             local scale = 10 ^ sPrecision[mmEditSlot]
             local value = target[mmEditSlot] + (positive and step or -step)
             value = (value >= 0 and math.floor(value * scale + 0.5) or
@@ -398,16 +400,14 @@ local function handleMenu(event)
             target[mmEditSlot] = math.max(-1000000, math.min(1000000,
                 value))
         elseif event == EVT_ENTER_BREAK then
-            if selectedRow >= 3 then
+            if mmRow >= 3 then
                 mmEditSlot = nil
-                menuPage, selectedRow = mmReturnPage, mmReturnRow
                 saveConfig()
             else
-                selectedRow = selectedRow + 1
+                mmRow = mmRow + 1
             end
         elseif event == EVT_EXIT_BREAK or event == EVT_ENTER_LONG then
             mmEditSlot = nil
-            menuPage, selectedRow = mmReturnPage, mmReturnRow
             saveConfig()
         end
         return true
@@ -571,8 +571,7 @@ local function handleMenu(event)
                     editField = 3
                 elseif selectedColumn == 5 then
                     mmEditSlot = slotIndex()
-                    mmReturnPage, mmReturnRow = menuPage, selectedRow
-                    selectedRow = 1
+                    mmRow = 1
                 elseif selectedColumn == 6 then
                     local slot = slotIndex()
                     sOn[slot] = 1 - sOn[slot]
@@ -714,11 +713,11 @@ local function drawMenu(event)
     if mmEditSlot then
         lcd.drawText(1, 1, "-- SENSOR MIN/MAX --", INVERS + SMLSIZE)
         lcd.drawText(1, 13, trim(sName[mmEditSlot]) .. " / " .. trim(sSrc[mmEditSlot]), SMLSIZE)
-        lcd.drawText(1, 25, (selectedRow == 1 and ">" or " ") .. "MIN: " ..
+        lcd.drawText(1, 25, (mmRow == 1 and ">" or " ") .. "MIN: " ..
             string.format("%." .. sPrecision[mmEditSlot] .. "f", sMin[mmEditSlot]), SMLSIZE)
-        lcd.drawText(1, 37, (selectedRow == 2 and ">" or " ") .. "MAX: " ..
+        lcd.drawText(1, 37, (mmRow == 2 and ">" or " ") .. "MAX: " ..
             string.format("%." .. sPrecision[mmEditSlot] .. "f", sMax[mmEditSlot]), SMLSIZE)
-        lcd.drawText(1, 52, (selectedRow == 3 and ">" or " ") .. "Done", SMLSIZE)
+        lcd.drawText(1, 52, (mmRow == 3 and ">" or " ") .. "Done", SMLSIZE)
         lcd.drawText(74, 52, "ENTER: next", SMLSIZE)
         return
     end
@@ -860,7 +859,7 @@ local function init()
     menuActive, menuPage, selectedRow = false, 1, 1
     selectedColumn = 1
     editField, editCharIdx, menuOpenTime = 0, 1, 0
-    mmEditSlot, mmReturnPage, mmReturnRow = nil, 1, 1
+    mmEditSlot, mmRow = nil, 1
     axisEditing = false
     calibrationStep, calibrationLevel, calibrationMessage = 0, nil, ""
     axisMessage, configSaveFailed = "", false
@@ -1328,7 +1327,10 @@ local function run(event)
         end
     end
     if trim(altimeterSource) ~= "" then
-        filteredAlt = readSlot(trim(altimeterSource), "") * 0.25 + filteredAlt * 0.75
+        local altitudeValue = readSlot(trim(altimeterSource), "")
+        if isFinite(altitudeValue) then
+            filteredAlt = altitudeValue * 0.25 + filteredAlt * 0.75
+        end
     end
     local pitch, roll = getAttitude()
     local rawHdg = (tonumber(getValue("Hdg")) or 0) * ((invHdg == 1) and -1 or 1)
