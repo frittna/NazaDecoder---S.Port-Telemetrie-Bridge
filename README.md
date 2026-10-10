@@ -1,5 +1,5 @@
 ## Naza-M V1/V2 to FrSky SmartPort Telemetrie Bridge - Arduino + EDGE-TX LUA SCRIPT
--  Project Site: https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ 8.Okt.2026 
+-  Project Site: https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ 10.Okt.2026 
 
 -->   runter scrollen für die deutsche Beschreibung  --  scroll down for german explanations   <--
   
