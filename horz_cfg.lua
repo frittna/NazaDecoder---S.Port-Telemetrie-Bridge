@@ -2,7 +2,7 @@
 -- Briefly loaded by horz.lua at startup (and after exiting the menu) and then discarded;
 -- the menu loads it independently to save settings. Located in the same folder as horz.lua.
 
--- GERMAN:
+-- DETUSCH:
 -- horz_cfg.lua: Config laden/speichern und Sensor-Katalog fuer horz.lua / horz_menu.lua
 -- Wird von horz.lua beim Start (und nach dem Menue) kurz geladen und danach verworfen;
 -- das Menue laedt es selbst nach, um zu speichern. Liegt im selben Ordner wie horz.lua.
