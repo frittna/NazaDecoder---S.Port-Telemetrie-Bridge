@@ -576,12 +576,10 @@ local function drawMenu(event)
         local axesFlags = (selectedRow == 7 and selectedColumn == 2) and INVERS or 0
         local attitudeFlags = (selectedRow == 8 and selectedColumn == 1) and INVERS or 0
         local viewFlags = (selectedRow == 8 and selectedColumn == 2) and INVERS or 0
-        lcd.drawText(8, line(5), "SENSORS", sensorsFlags + SMLSIZE)
-        lcd.drawText(78, line(5), "AXES", axesFlags + SMLSIZE)
-        lcd.drawText(8, line(6), "ATTITUDE?:" ..
-            ((cfg.attitudeMode == 1) and "ANGLES" or "VECTORS"), attitudeFlags + SMLSIZE)
-        lcd.drawText(78, line(6), "BOX:" ..
-            ((cfg.viewMode == 1) and "FULL" or "SIMPLE"), viewFlags + SMLSIZE)
+        lcd.drawText(8, line(5), "SENSOR MENU", sensorsFlags + SMLSIZE)
+        lcd.drawText(78, line(5), "AXIS MENU", axesFlags + SMLSIZE)
+        lcd.drawText(43, line(6), "HORIZON BOX: " ..
+            ((cfg.viewMode == 1) and "FULL" or "LITE"), viewFlags + SMLSIZE)
     elseif isSensorPage() then
         local first, last
         if menuPage == 2 then
@@ -678,7 +676,7 @@ local function drawMenu(event)
         rows[1], rows[2], rows[3] = "Forward: " .. cfg.fwdAxis, "Side: " .. cfg.sideAxis,
             "Down: " .. cfg.downAxis
         --rows[4] = "BOX: " .. ((cfg.viewMode == 1) and "FULL" or "SIMPLE")   -- die zeile wird nur als hinweis verwendet , war doppelt, keine funktion mehr
-        rows[5] = "Attitude: " .. ((cfg.attitudeMode == 1) and "ANGLES" or "VECTOR")
+        rows[5] = "Attitude: " .. ((cfg.attitudeMode == 1) and "ANGLES" or "VECTORS")
         for i = 1, #rows do
             local y = 10 + (i - 1) * 8
             local selected = i == selectedRow
