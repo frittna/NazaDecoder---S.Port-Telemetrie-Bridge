@@ -29,6 +29,7 @@ local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
 local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
 local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
+local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
@@ -501,6 +502,7 @@ local function drawBigValue(x, y, i, limit)
 end
 
 local function drawSparkline(x0, y0, x1, y1, lo, hi, fixedLow, fixedHigh, valueFormat)
+    if sparkCount == 0 then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
     local windowLow, windowHigh
     for k = 0, sparkCount - 1 do
@@ -517,9 +519,10 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi, fixedLow, fixedHigh, valueF
     local lowText = string.format(valueFormat, fixedLow or windowLow)
     lcd.drawText(1, y0, highText, SMLSIZE)
     lcd.drawText(1, y1 - 6, lowText, SMLSIZE)
-    x0 = math.min(x1, math.max(x0, 1 + math.max(charLen(highText), charLen(lowText)) * 5 + 2))
-    lcd.drawLine(x0, y0, x1, y0, (windowHigh > hi) and DOTTED or SOLID, FORCE)
-    lcd.drawLine(x0, y1, x1, y1, (windowLow < lo) and DOTTED or SOLID, FORCE)
+    local plotX0 = math.min(x1, math.max(x0,
+        1 + math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
+    lcd.drawLine(plotX0, y0, x1, y0, (windowHigh > hi) and DOTTED or SOLID, FORCE)
+    lcd.drawLine(plotX0, y1, x1, y1, (windowLow < lo) and DOTTED or SOLID, FORCE)
     if sparkCount < 2 then return end
     local span, h = hi - lo, y1 - y0 - 1
     local px, py
@@ -527,7 +530,7 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi, fixedLow, fixedHigh, valueF
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
         local y = y1 - 1 - ratio * h
-        local x = x0 + k * (x1 - x0) / (sparkCount - 1)
+        local x = plotX0 + k * (x1 - plotX0) / (sparkCount - 1)
         if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
         px, py = x, y
     end
