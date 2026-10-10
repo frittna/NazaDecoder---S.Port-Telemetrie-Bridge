@@ -569,7 +569,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
         local y = y1 - 1 - ratio * h
-        local x = plotX0 + k * (x1 - plotX0) / (sparkCount - 1)
+        local x = plotX0 + k * (x1 - plotX0) / (SPARK_N - 1)
         if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
         px, py = x, y
     end
