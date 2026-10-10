@@ -29,8 +29,8 @@ local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
 local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
 local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
-local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
-local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
+local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, -1 -- SMLSIZE character width and spacing in pixels
+local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 0, 6
 local SPARK_MIN_PLOT_WIDTH = 4
 local SPARK_LABEL_COMPACT_DIGITS = 6
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
@@ -565,8 +565,20 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     -- Unconfigured labels follow the session-derived scale edge used by the trace.
     local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
-    lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
-    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
+    local highFlags, lowFlags = SMLSIZE, SMLSIZE
+    -- Beide MM-Grenzen gesetzt: Ueberschreitung invertiert links, bisherige Grenze im Graph rechts
+    if fixedLow and fixedHigh then
+        local currentValue = sparkSample(start, sparkCount - 1)
+        if currentValue > fixedHigh then
+            highText, highFlags = sparkLabel(currentValue, slot, maxLabelChars), SMLSIZE + INVERS
+            lcd.drawText(x1, y0, sparkLabel(fixedHigh, slot, maxLabelChars), SMLSIZE + RIGHT)
+        elseif currentValue < fixedLow then
+            lowText, lowFlags = sparkLabel(currentValue, slot, maxLabelChars), SMLSIZE + INVERS
+            lcd.drawText(x1, y1 - SPARK_LABEL_HEIGHT, sparkLabel(fixedLow, slot, maxLabelChars), SMLSIZE + RIGHT)
+        end
+    end
+    lcd.drawText(SPARK_LABEL_X, y0, highText, highFlags)
+    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, lowFlags)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
     local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
     local plotX0 = math.min(maxPlotX0, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
@@ -642,7 +654,7 @@ local function drawLeftColumn()
             sparkHead = (sparkHead + 1) % SPARK_N
             if sparkCount < SPARK_N then sparkCount = sparkCount + 1 end
         end
-        drawSparkline(1, 34, 43, 60, slot)
+        drawSparkline(0, 34, 46, 60, slot)
     end
 end
 
