@@ -565,8 +565,11 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     -- Unconfigured labels follow the session-derived scale edge used by the trace.
     local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
-    lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
-    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
+    local overHigh = fixedHigh and windowHigh > fixedHigh
+    local underLow = fixedLow and windowLow < fixedLow
+    local autoLabelStyle = (overHigh or underLow) and (SMLSIZE + INVERS) or SMLSIZE
+    lcd.drawText(SPARK_LABEL_X, y0, highText, fixedHigh and SMLSIZE or autoLabelStyle)
+    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, fixedLow and SMLSIZE or autoLabelStyle)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
     local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
     local plotX0 = math.min(maxPlotX0, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
