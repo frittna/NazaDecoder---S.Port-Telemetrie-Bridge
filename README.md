@@ -1,10 +1,10 @@
 ## Naza-M V1/V2 to FrSky SmartPort Telemetry Bridge - Arduino + EDGE-TX LUA SCRIPT
-- **Project Site:** https://github.com @ Oct 10, 2026
+- **Project Site:** https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ Oct 10, 2026
 
 - -> runterscrollen für detusch - scroll down for german <--
 
 - Integrates all GPS data and compass heading from the DJI Naza-M V1/V2 into the native FrSky SmartPort (S.Port) telemetry data channel.
-- Uses the NazaDecoder library [dalmirdasilva/ArduinoNazaDecoder](https://github.com) and the FrSkySportTelemetry library [FrSkySportTelemetry](https://github.com).
+- Uses the NazaDecoder library https://github.com/dalmirdasilva/ArduinoNazaDecoder and the FrSkySportTelemetry library https://github.com/marhar/FrSkySportTelemetry.
 - **Automatically discovered sensors:** Latitude, Longitude, Altitude, Speed, Heading, Timestamp, Satellites\*, FixType\*  
 *\*Note: Satellite count and GPS Fix Type are not natively supported in the standard FrSky GPS packet. They are transmitted using auxiliary values via the standard RPM sensor slot (which also contains T1+T2). The RPM sensor itself can be deleted later. Simply rename T1+T2 to "Sats" and "GFix" in your transmitter.*
 
@@ -43,7 +43,9 @@ In my configuration:
 
 #### CONFIG MENU
 - `Ground View`: Toggle the ground visualization style between dots, lines, or solid white.
+  
 - `PITCH/ROLL`: Source adjustments can only be configured in Angle Mode. Otherwise, pitch, roll, and heading can be inverted here.
+  
 - `HORIZON BOX`: Choose between `FULL` and `LITE`. The Lite mode switches to a simplified, less resource-intensive calculation method for the horizon box boundaries.
 
 #### SENSOR MENU
@@ -124,7 +126,7 @@ In my configuration:
 
 - integriert alle GPS-Daten und das Kompass-Heading vom DJI Naza-M V1/V2 in den nativen FrSky SmartPort Telemetrie-Datenkanal S.Port.
 
-- verwendet NazaDecoder Bibliothek [dalmirdasilva/ArduinoNazaDecoder](https://github.com/dalmirdasilva/ArduinoNazaDecoder) und FrSkySportTelemetry Bibiliothek [FrSkySportTelemetry](https://github.com/marhar/FrSkySportTelemetry)
+- verwendet NazaDecoder Bibliothek https://github.com/dalmirdasilva/ArduinoNazaDecoder und FrSkySportTelemetry Bibiliothek https://github.com/marhar/FrSkySportTelemetry
 
 - automatisch gefundene Sensoren: Latitude, Longitude, Altitude, Speed, Heading, Timestamp, Satellites*, FixType*
 *)Die Satellitenanzahl und GPSFix-Type welche im FrSky GPS-Paket nicht vorgesehen sind werden mit Hilfswerten des Standartsensors RPM (enthält auch T1+T2) übertragen. 
@@ -166,8 +168,11 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 
 ### CONFIG MENU
 -- `Ground View`: Zeigt Boden als Punkte, Linien oder in weiß
+
 -- `PITCH/ROLL` Source kann nur im Angle-Modus ungestellt werden* , ansonst können diese hier samt Heading invertiert werden.
+
 -- `HORIZON BOX`: FULL/LITE - Lite schaltet auf eine primitivere Berecnungsart der Horizontbox um.
+
 
 ### SENSOR MENU
 - Vorher sollte man alle seine Sensornamen vom Sender namentlich 100% kennen und nun im Skipt Menü bei Sensors `Name` und die Quelle `Src` auswählen.
