@@ -66,7 +66,7 @@ end
 
 local function sensorColumnCount(row, page)
     row, page = row or selectedRow, page or menuPage
-    if page == 1 and row >= 7 then return 2 end
+    if page == 1 and row == 7 then return 2 end
     if page == 2 and row <= 6 then return 6 end
     if page == 4 and row <= 6 then return 3 end
     if page == 3 and row <= 3 then return 6 end
@@ -79,7 +79,7 @@ local function menuContentRows()
     if menuPage == 2 then return 6 end
     if menuPage == 3 then return 6 end
     if menuPage == 4 then return 6 end
-    return 6
+    return 5
 end
 
 local function menuRows()
@@ -359,11 +359,7 @@ local function handleMenu(event)
                 end
                 selectedColumn = 1
             elseif selectedRow == 8 then
-                if selectedColumn == 1 then
-                    cfg.attitudeMode = (cfg.attitudeMode == 1) and 2 or 1
-                else
-                    cfg.viewMode = 1 - cfg.viewMode
-                end
+                cfg.viewMode = 1 - cfg.viewMode
                 save()
             end
         elseif isSensorPage() then
@@ -407,12 +403,9 @@ local function handleMenu(event)
                 editField = 5
             end
         elseif menuPage == 5 then
-            if selectedRow == 5 then
+            if selectedRow == 4 then
                 cfg.attitudeMode = (cfg.attitudeMode == 1) and 2 or 1
                 save()
-            elseif selectedRow == 4 then
-                --cfg.viewMode = 1 - cfg.viewMode    //option war doppelt, wird nur als hinweis gebraucht
-                --save()
             elseif selectedRow <= 3 then
                 if axisEditing then
                     local axis = (selectedRow == 1 and cfg.fwdAxis) or (selectedRow == 2 and cfg.sideAxis) or cfg.downAxis
@@ -431,7 +424,7 @@ local function handleMenu(event)
                     axisEditing = true
                     axisMessage = ""
                 end
-            elseif selectedRow == 6 then
+            elseif selectedRow == 5 then
                 calibrationStep = 1
                 calibrationLevel = nil
                 calibrationMessage = ""
@@ -523,7 +516,7 @@ local titles = {
     "--AXIS SETTING--"
 }
 local groundNames = { "White", "Lines", "Points" }
-local axisRows = { "", "", "", "", "", "Calibrate Attitude" }
+local axisRows = { "", "", "", "", "Calibrate Attitude" }
 
 local function line(n) return 9 + (n - 1) * 8 end
 
@@ -574,8 +567,7 @@ local function drawMenu(event)
         checkbox(line(4), cfg.invHdg == 1, selectedRow == 6)
         local sensorsFlags = (selectedRow == 7 and selectedColumn == 1) and INVERS or 0
         local axesFlags = (selectedRow == 7 and selectedColumn == 2) and INVERS or 0
-        local attitudeFlags = (selectedRow == 8 and selectedColumn == 1) and INVERS or 0
-        local viewFlags = (selectedRow == 8 and selectedColumn == 2) and INVERS or 0
+        local viewFlags = (selectedRow == 8) and INVERS or 0
         lcd.drawText(8, line(5), "SENSOR MENU", sensorsFlags + SMLSIZE)
         lcd.drawText(78, line(5), "AXIS MENU", axesFlags + SMLSIZE)
         lcd.drawText(43, line(6), "HORIZON BOX: " ..
@@ -675,14 +667,13 @@ local function drawMenu(event)
         local rows = axisRows
         rows[1], rows[2], rows[3] = "Forward: " .. cfg.fwdAxis, "Side: " .. cfg.sideAxis,
             "Down: " .. cfg.downAxis
-        --rows[4] = "BOX: " .. ((cfg.viewMode == 1) and "FULL" or "SIMPLE")   -- die zeile wird nur als hinweis verwendet , war doppelt, keine funktion mehr
-        rows[5] = "Attitude: " .. ((cfg.attitudeMode == 1) and "ANGLES" or "VECTORS")
+        rows[4] = "Attitude: " .. ((cfg.attitudeMode == 1) and "ANGLES" or "VECTORS")
         for i = 1, #rows do
             local y = 10 + (i - 1) * 8
             local selected = i == selectedRow
             lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
         end
-        if selectedRow ~= 6 then
+        if selectedRow ~= 5 then
             if calibrationMessage ~= "" then
                 lcd.drawText(9, 56, calibrationMessage, SMLSIZE)
             elseif axisMessage ~= "" then
