@@ -574,7 +574,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
             hi = sessHigh
             highText, highFlags = sparkLabel(sessHigh, slot, maxLabelChars), SMLSIZE + INVERS
         end
-        if sessLow and sessLow < fixedLow then
+        if sessLow and sessLow < fixedLow and sessLow ~= 0 then   --    dazugefügt wegen anfangs 0-Werte: and sessLow ~=0 
             lo = sessLow
             lowText, lowFlags = sparkLabel(sessLow, slot, maxLabelChars), SMLSIZE + INVERS
         end
