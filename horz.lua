@@ -1,45 +1,24 @@
 -- LUA: Horizont & Telemetrie Sensor Display for FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 10.Okt.2026
 --> Das LUA Script ist entstanden beim Projekt github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
+--> Dateien (alle drei im selben Ordner /SCRIPTS/TELEMETRY/ auf dem Sender):
+-->   horz.lua       Hauptansicht (das ist das Telemetry-Script, nur dieses im Screen-Setup waehlen)
+-->   horz_menu.lua  Menue/Kalibrierung/Config-Editor, wird erst bei langem MENU-Druck geladen
+-->   horz_cfg.lua   Config laden/speichern + Sensor-Katalog, wird nur kurz geladen
+--> Die Nebendateien haben mehr als 6 Zeichen im Namen und werden per loadScript() mit vollem
+--> Pfad geladen. Falls sie in der Telemetry-Script-Auswahl auftauchen: Pfad in DIR anpassen und
+--> beide in einen Unterordner legen (z.B. /SCRIPTS/TELEMETRY/horz/).
 
-local invPitch, invRoll, invHdg = 0, 0, 0
-local groundMode, attitudeMode, viewMode = 2, 1, 1
-local pitchSource, rollSource = "Ptch", "Roll"
-local insideSource, insideEnabled = "Alt", 1
-local altimeterSource = "Alt"
-local graphSeconds = 30 -- Graph X-Time (10..999 s)
-local graphEnabled = 1
-local sPrecision, sMin, sMax = {}, {}, {}
-local sessionMin, sessionMax, sessionSource = {}, {}, {}
+local DEBUG_MEM = false -- true: zeigt collectgarbage("count") in KB (jetzt/Spitze/nach init)
+local DIR = "/SCRIPTS/TELEMETRY/"
+local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
+local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
+local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
-local sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
-    {}, 0, 0, 0, 0, nil, 0
--- Archer seitlich: Nase unten = AccX+, rechte Tragfläche unten = AccZ+, unten = AccY+.
-local fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
-local filteredAlt, filteredHdg = 0, 0
-local homeLat, homeLon
-local gpsFix3Since, gpsLowFixSince, gpsWarningSince = nil, nil, nil
-local menuActive, menuPage, selectedRow = false, 1, 1
-local selectedColumn = 1
-local editField, editCharIdx, menuOpenTime = 0, 1, 0
-local mmEditSlot, mmRow = nil, 1
-local calibrationStep, calibrationLevel = 0, nil
-local calibrationMessage = ""
-local axisMessage = ""
-local configSaveFailed = false
-local configLoadWarning = false
-local axisEditing = false
-local configLoaded = false
-local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
--- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
-local CONFIG_READ_LIMIT = 2048
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
 local HOME_MIN_DISTANCE_METERS, COMPASS_PIXELS_PER_DEGREE = 5, 0.75
-local SLOT_NAME_MAX, SLOT_NAME_VISIBLE = 4, 4
--- Alte Configs duerfen 12 Zeichen enthalten; beim Laden wird auf 4 gekuerzt.
-local SLOT_NAME_LEGACY_MAX = 12
-local MM_LIMIT = 1000000
+local DEGREE_UTF8 = "°"
 local atan2 = math.atan2 or function(y, x)
     if x > 0 then return math.atan(y / x) end
     if x < 0 then return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi) end
@@ -48,36 +27,48 @@ local atan2 = math.atan2 or function(y, x)
     return 0
 end
 
-local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
-local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
-local defaults = {
-    names = { "RX", "Alt", "VSp", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
-    sources = { "RSSI", "GAlt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
-    units = { "dB", "m", "m/s", "kmh", "m", "°", "V", "V", "A" }
+-- Gemeinsamer Zustand fuer Hauptansicht, Menue und Config-Modul
+local cfg = {
+    dir = DIR,
+    invPitch = 0, invRoll = 0, invHdg = 0,
+    groundMode = 2, attitudeMode = 1, viewMode = 1,
+    pitchSource = "Ptch", rollSource = "Roll",
+    insideSource = "Alt", insideEnabled = 1,
+    altimeterSource = "Alt",
+    graphSeconds = 30, graphEnabled = 1,
+    fwdAxis = "X+", sideAxis = "Z-", downAxis = "Y+",
+    sName = {}, sSrc = {}, sUnit = {}, sOn = {},
+    sPrecision = {}, sMin = {}, sMax = {},
+    configSaveFailed = false, configLoadWarning = false
 }
-local sName, sSrc, sUnit = {}, {}, {}
-local sOn = {} -- Slot sichtbar (1) / abgeschaltet (0), Namen bleiben erhalten
+local sMin, sMax = cfg.sMin, cfg.sMax
+local menu, menuFailUntil = nil, 0
+local ready, dirty = false, false
+local memInit, memPeak = 0, 0
 
-local catalog = {
-    { "", "%.1f", 1, "" }, { "RSSI", "%.0f", 1, "dB" }, { "Alt", "%.0f", 1, "m" },
-    { "GSpd", "%.0f", 1, "kmh" }, { "Dist", "%.0f", 1, "m" },
-    { "VSpd", "%.1f", 1, "m/s" }, { "Hdg", "%.0f", 1, "°" },
-    { "Cels", "%.1f", 1, "V" }, { "celD", "%.2f", 1, "V" },
-    { "VFAS", "%.1f", 1, "V" }, { "Curr", "%.1f", 1, "A" },
-    { "Tmp1", "%.0f", 1, "C" }, { "Tmp2", "%.0f", 1, "C" },
-    { "Ptch", "%.0f", 1, "°" }, { "Roll", "%.0f", 1, "°" },
-    { "AccX", "%.2f", 1, "g" }, { "AccY", "%.2f", 1, "g" },
-    { "AccZ", "%.2f", 1, "g" }, { "GAlt", "%.0f", 1, "m" },
-    { "Sats", "%.0f", 1, "" }, { "Gfix", "%.0f", 1, "" },
-    { "A1", "%.2f", 1, "V" }, { "A2", "%.2f", 1, "V" }
+-- Vorberechnete Werte (nur in prepare() neu gesetzt)
+local invPitch, invRoll, invHdg = 0, 0, 0
+local groundMode, attitudeMode, viewMode = 2, 1, 1
+local pitchSrc, rollSrc, altSrc, insideSrc = "", "", "", ""
+local insideEnabled, insideFmt, insideIsAlt = 1, "%.1f", true
+local graphEnabled, graphInterval = 1, 0
+local axI, axS = { 1, 2, 3 }, { 1, 1, 1 }
+local pSrc, pName, pLabel, pUnit, nameLen, uLen = {}, {}, {}, {}, {}, {}
+local valFmt, fmtBoth, fmtLine, fmtMax, fmtMin = {}, {}, {}, {}, {}
+local track, pShow = {}, {}
+local leftActive, leftN, leftStep = {}, 0, 0
+-- Werte und Texte, nur bei Wertaenderung neu formatiert
+local slotValues, lastVal = {}, {}
+local valText, bothText, lineText, vLen, bLen = {}, {}, {}, {}, {}
 
-}
-local catalogByName = {}
-for i = 1, #catalog do
-    catalogByName[string.lower(catalog[i][1])] = catalog[i]
-end
+local sessionMin, sessionMax, sessionSource = {}, {}, {}
+local sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
+    {}, 0, 0, 0, 0, nil, 0
+local filteredAlt, filteredHdg = 0, 0
+local homeLat, homeLon
+local gpsFix3Since, gpsLowFixSince, gpsWarningSince = nil, nil, nil
+local vec = { 0, 0, 0 }
 
-local slotValues, slotFormats = {}, {}
 local headingLabels = {
     [0] = "N",
     [45] = "NO",
@@ -88,1029 +79,119 @@ local headingLabels = {
     [270] = "W",
     [315] = "NW"
 }
-local DEGREE_UTF8 = "°"
-local allowedChars =
-" aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ0123456789-+_.*" ..
-DEGREE_UTF8 .. "%/() " -- Leerzeichen am Anfang/Ende (Null-Abstand)
-
-local function textCharacters(value)
-    local characters, index = {}, 1
-    while index <= #value do
-        local character = string.sub(value, index, index + 1)
-        if character == DEGREE_UTF8 then
-            characters[#characters + 1] = DEGREE_UTF8
-            index = index + 2
-        else
-            characters[#characters + 1] = string.sub(value, index, index)
-            index = index + 1
-        end
-    end
-    return characters
-end
-
-local function joinCharacters(characters)
-    local result = ""
-    for index = 1, #characters do
-        result = result .. characters[index]
-    end
-    return result
-end
-
-local function textSlice(value, first, last)
-    local characters = textCharacters(value)
-    local result = {}
-    for index = math.max(1, first), math.min(last or #characters, #characters) do
-        result[#result + 1] = characters[index]
-    end
-    return joinCharacters(result)
-end
-
-local function textLength(value)
-    return #textCharacters(value)
-end
-
-local allowedCharList = textCharacters(allowedChars)
-
-local function trim(str)
-    if not str then return "" end
-    return (string.gsub(tostring(str), "^%s*(.-)%s*$", "%1"))
-end
-
-local function customSlotForSource(source)
-    local key = string.lower(trim(source))
-    if key == "" then return nil end
-    for i = CUSTOM_SLOT_FIRST, SLOT_COUNT do
-        if string.lower(trim(sName[i])) == key then return i end
-    end
-end
-
-local function catalogEntry(source)
-    local key = string.lower(trim(source))
-    local entry = catalogByName[key]
-    if entry then return entry end
-    local slot = customSlotForSource(key)
-    if slot then
-        return { trim(sName[slot]), "%." .. sPrecision[slot] .. "f", 1, trim(sUnit[slot]) }
-    end
-end
-
-local function customCatalogEntryAt(index)
-    local customIndex = index - #catalog
-    if customIndex < 1 then return nil end
-    local found = 0
-    for i = CUSTOM_SLOT_FIRST, SLOT_COUNT do
-        local name = trim(sName[i])
-        local key = string.lower(name)
-        if key ~= "" and not catalogByName[key] then
-            local duplicate = false
-            for previous = CUSTOM_SLOT_FIRST, i - 1 do
-                if string.lower(trim(sName[previous])) == key then
-                    duplicate = true
-                    break
-                end
-            end
-            if not duplicate then
-                found = found + 1
-                if found == customIndex then
-                    return { name, "%." .. sPrecision[i] .. "f", 1, trim(sUnit[i]) }
-                end
-            end
-        end
-    end
-end
-
-local function catalogCount()
-    local count = #catalog
-    while customCatalogEntryAt(count + 1) do count = count + 1 end
-    return count
-end
-
-local function catalogEntryAt(index)
-    if index <= #catalog then return catalog[index] end
-    return customCatalogEntryAt(index)
-end
-
-local function padStr(str, len)
-    local characters = textCharacters(tostring(str or ""))
-    while #characters < len do characters[#characters + 1] = " " end
-    local result = {}
-    for index = 1, len do result[index] = characters[index] end
-    return joinCharacters(result)
-end
-
-local function modelPath()
-    local info = model.getInfo()
-    local name = string.gsub((info and info.name) or "model", "[ %c%p]", "_")
-    return "/LOGS/hz_" .. name .. ".cfg"
-end
-
-local function setDefaults()
-    invPitch, invRoll, invHdg = 0, 0, 0
-    groundMode, attitudeMode, viewMode = 2, 1, 1
-    pitchSource, rollSource = "Ptch", "Roll"
-    insideSource, insideEnabled = "Alt", 1
-    altimeterSource = "Alt"
-    graphSeconds = 30
-    graphEnabled = 1
-    fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
-    for i = 1, SLOT_COUNT do
-        if i <= STANDARD_SLOT_COUNT then
-            sName[i], sSrc[i], sUnit[i] =
-                defaults.names[i], defaults.sources[i], defaults.units[i]
-            sOn[i] = 1
-        else
-            sName[i], sSrc[i], sUnit[i] = "", "", ""
-            sOn[i] = 0
-        end
-        local entry = catalogByName[string.lower(sSrc[i])]
-        sPrecision[i] = (i > STANDARD_SLOT_COUNT) and 0 or
-            (entry and tonumber(string.match(entry[2], "%.(%d)f")) or 0)
-        sMin[i], sMax[i] = 0, 0
-    end
-end
-
-local function validAxis(value)
-    return value == "X+" or value == "X-" or value == "Y+" or value == "Y-" or
-        value == "Z+" or value == "Z-"
-end
-
-local function validText(value, maxLen)
-    local i, charCount = 1, 0
-    while i <= #value do
-        local char = string.sub(value, i, i + 1)
-        if char == DEGREE_UTF8 then
-            i = i + 2
-        else
-            local byte = string.byte(value, i)
-            local ascii = string.sub(value, i, i)
-            if byte >= 128 or not string.find(allowedChars, ascii, 1, true) then
-                return false
-            end
-            i = i + 1
-        end
-        charCount = charCount + 1
-        if charCount > maxLen then return false end
-    end
-    return true
-end
 
 local function isFinite(value)
     return value and value == value and value ~= math.huge and value ~= -math.huge
 end
 
-local function roundToPrecision(value, precision)
-    local scale = 10 ^ precision
-    return (value >= 0 and math.floor(value * scale + 0.5) or
-        math.ceil(value * scale - 0.5)) / scale
-end
-
-local function loadConfig()
-    setDefaults()
-    configLoadWarning = false
-    local f = io.open(modelPath(), "r")
-    if f then
-        local contents, total = "", 0
-        while total < CONFIG_READ_LIMIT do
-            local chunk = io.read(f, math.min(128, CONFIG_READ_LIMIT - total))
-            if not chunk or #chunk == 0 then break end
-            contents = contents .. chunk
-            total = total + #chunk
-        end
-        io.close(f)
-        if contents then
-            local firstLine = true
-            for line in string.gmatch(contents, "[^\r\n]+") do
-                if firstLine then
-                    firstLine = false
-                    if line ~= "HORZCFG=2" then
-                        configLoadWarning = true
-                        break
-                    end
-                else
-                    local key, value = string.match(line, "^([^=]+)=(.*)$")
-                    if key == "MODE" and (value == "ANGLES" or value == "VECTOR") then
-                        attitudeMode = (value == "VECTOR") and 2 or 1
-                    elseif key == "VIEW" and (value == "CLASSIC" or value == "3D") then
-                        viewMode = (value == "3D") and 1 or 0
-                    elseif key == "INVERT" then
-                        local p, r, h = string.match(value, "^(%d),(%d),(%d)$")
-                        if p and tonumber(p) <= 1 and tonumber(r) <= 1 and tonumber(h) <= 1 then
-                            invPitch, invRoll, invHdg = tonumber(p), tonumber(r), tonumber(h)
-                        end
-                    elseif key == "GROUND" then
-                        local ground = tonumber(value)
-                        if ground and ground % 1 == 0 and ground >= 0 and ground <= 2 then
-                            groundMode = ground
-                        end
-                    elseif key == "SOURCES" then
-                        local p, r = string.match(value, "^(.-),(.-)$")
-                        if p ~= nil and r ~= nil and validText(p, 4) and validText(r, 4) then
-                            pitchSource, rollSource = p, r
-                        end
-                    elseif key == "INSIDE" then
-                        local source, enabled = string.match(value, "^(.-),([01])$")
-                        if source and validText(source, 4) then
-                            insideSource, insideEnabled = source, tonumber(enabled)
-                        end
-                    elseif key == "ALTIMETER-SCALE" and validText(value, 4) then
-                        altimeterSource = value
-                    elseif key == "SLOTON" then
-                        if string.match(value, "^[01]+$") and
-                            (#value == STANDARD_SLOT_COUNT or #value == SLOT_COUNT) then
-                            for i = 1, #value do sOn[i] = tonumber(string.sub(value, i, i)) end
-                        end
-                    elseif key == "GRAPHTIME" then
-                        local secs = tonumber(value)
-                        if secs and secs % 1 == 0 and secs >= 10 and secs <= 999 then
-                            graphSeconds = secs
-                        end
-                    elseif key == "GRAPH" and (value == "0" or value == "1") then
-                        graphEnabled = tonumber(value)
-                    elseif key == "SLOTPRECI" then
-                        local iText, precision = string.match(value, "^(%d+)|(%d)$")
-                        local i, number = tonumber(iText), tonumber(precision)
-                        if i and i % 1 == 0 and i >= 1 and i <= SLOT_COUNT and number and number <= 4 then
-                            sPrecision[i] = number
-                        end
-                    elseif key == "SLOTRANGE" then
-                        local iText, minText, maxText =
-                            string.match(value, "^(%d+)|([^|]*)|([^|]*)$")
-                        local i, minValue, maxValue = tonumber(iText), tonumber(minText), tonumber(maxText)
-                        if i and i % 1 == 0 and i >= 1 and i <= SLOT_COUNT and
-                            isFinite(minValue) and isFinite(maxValue) and
-                            math.abs(minValue) <= MM_LIMIT and math.abs(maxValue) <= MM_LIMIT then
-                            sMin[i], sMax[i] = minValue, maxValue
-                        end
-                    elseif key == "AXES" then
-                        local fwd, side, down = string.match(value, "^([^,]+),([^,]+),([^,]+)$")
-                        if fwd and side and down and validAxis(fwd) and validAxis(side) and validAxis(down) and
-                            string.sub(fwd, 1, 1) ~= string.sub(side, 1, 1) and
-                            string.sub(fwd, 1, 1) ~= string.sub(down, 1, 1) and
-                            string.sub(side, 1, 1) ~= string.sub(down, 1, 1) then
-                            fwdAxis, sideAxis, downAxis = fwd, side, down
-                        end
-                    elseif key == "SLOT" then
-                        local iText, name, source, unit =
-                            string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
-                        local i = tonumber(iText)
-                        if iText and name and source and unit and i and i % 1 == 0 and
-                            i >= 1 and i <= SLOT_COUNT and validText(name, SLOT_NAME_LEGACY_MAX) and
-                            validText(source, 4) and validText(unit, 3) then
-                            sName[i], sSrc[i], sUnit[i] =
-                                textSlice(name, 1, SLOT_NAME_MAX), source, unit
-                            if i >= CUSTOM_SLOT_FIRST then
-                                sSrc[i] = trim(sName[i])
-                            end
-                        end
-                    end
-                end
-            end
-        end
+-- Zeichenzahl (das UTF-8-Gradzeichen zaehlt als 1), ohne Tabellen zu erzeugen
+local function charLen(text)
+    local count, at = #text, 1
+    while true do
+        local found = string.find(text, DEGREE_UTF8, at, true)
+        if not found then return count end
+        count, at = count - 1, found + 2
     end
-    configLoaded = true
 end
 
-local function saveConfig()
-    -- Leerzeichen am Rand werden beim Beenden der Eingabe entfernt
-    pitchSource, rollSource, altimeterSource =
-        trim(pitchSource), trim(rollSource), trim(altimeterSource)
+local function escapeFormat(text)
+    return (string.gsub(text, "%%", "%%%%"))
+end
+
+local function axisSetting(k, setting)
+    local axis = string.sub(setting, 1, 1)
+    axI[k] = (axis == "X") and 1 or ((axis == "Y") and 2 or 3)
+    axS[k] = (string.sub(setting, 2, 2) == "-") and -1 or 1
+end
+
+-- Berechnet alles Abgeleitete aus cfg neu (beim Start und nach dem Menue)
+local function prepare(C)
+    local trim, textSlice = C.trim, C.textSlice
+    invPitch, invRoll, invHdg = cfg.invPitch, cfg.invRoll, cfg.invHdg
+    groundMode, attitudeMode, viewMode = cfg.groundMode, cfg.attitudeMode, cfg.viewMode
+    pitchSrc, rollSrc, altSrc = trim(cfg.pitchSource), trim(cfg.rollSource), trim(cfg.altimeterSource)
+    axisSetting(1, cfg.fwdAxis)
+    axisSetting(2, cfg.sideAxis)
+    axisSetting(3, cfg.downAxis)
+    graphEnabled = cfg.graphEnabled
+    graphInterval = math.floor(cfg.graphSeconds * 100 / SPARK_N)
+    insideEnabled = cfg.insideEnabled
+    insideSrc = trim(cfg.insideSource)
+    insideIsAlt = string.lower(insideSrc) == "alt"
+    local _, fmt, _, unit = C.catalogEntry(cfg, cfg.insideSource)
+    insideFmt = ((fmt and insideSrc ~= "") and fmt or "%.1f") .. escapeFormat(unit or "")
     for i = 1, SLOT_COUNT do
-        sName[i], sSrc[i], sUnit[i] =
-            textSlice(trim(sName[i]), 1, SLOT_NAME_MAX), trim(sSrc[i]), trim(sUnit[i])
-        if i >= CUSTOM_SLOT_FIRST then sSrc[i] = trim(sName[i]) end
-    end
-    local f = io.open(modelPath(), "w")
-    if not f then
-        configSaveFailed = true
-        return false
-    end
-    io.write(f, "HORZCFG=2\n")
-    io.write(f, "MODE=" .. ((attitudeMode == 1) and "ANGLES" or "VECTOR") .. "\n")
-    io.write(f, "VIEW=" .. ((viewMode == 1) and "3D" or "CLASSIC") .. "\n")
-    io.write(f, "INVERT=" .. invPitch .. "," .. invRoll .. "," .. invHdg .. "\n")
-    io.write(f, "GROUND=" .. groundMode .. "\n")
-    io.write(f, "SOURCES=" .. pitchSource .. "," .. rollSource .. "\n")
-    io.write(f, "INSIDE=" .. insideSource .. "," .. insideEnabled .. "\n")
-    io.write(f, "ALTIMETER-SCALE=" .. trim(altimeterSource) .. "\n")
-    local on = ""
-    for i = 1, SLOT_COUNT do on = on .. sOn[i] end
-    io.write(f, "SLOTON=" .. on .. "\n")
-    io.write(f, "GRAPHTIME=" .. graphSeconds .. "\n")
-    io.write(f, "GRAPH=" .. graphEnabled .. "\n")
-    io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
-    for i = 1, SLOT_COUNT do
-        io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
-            trim(sSrc[i]) .. "|" .. trim(sUnit[i]) .. "\n")
-        io.write(f, "SLOTPRECI=" .. i .. "|" .. sPrecision[i] .. "\n")
-        io.write(f, "SLOTRANGE=" .. i .. "|" .. sMin[i] .. "|" .. sMax[i] .. "\n")
-    end
-    io.close(f)
-    configSaveFailed = false
-    configLoadWarning = false
-    return true
-end
-
-local charPos, charPosKey = 0, ""
-local function changeChar(text, index, delta)
-    local characters = textCharacters(text)
-    local char = characters[index]
-    local position = 1
-    for i = 1, #allowedCharList do
-        if allowedCharList[i] == char then
-            position = i
-            break
+        local src = trim(cfg.sSrc[i])
+        pSrc[i] = src
+        if sessionSource[i] ~= src then
+            sessionSource[i], sessionMin[i], sessionMax[i] = src, nil, nil
+        end
+        track[i] = (i >= CUSTOM_SLOT_FIRST or cfg.sOn[i] == 1) and src ~= ""
+        if not track[i] then sessionMin[i], sessionMax[i] = nil, nil end
+        valFmt[i] = "%." .. cfg.sPrecision[i] .. "f"
+        fmtMax[i], fmtMin[i] = "Max:" .. valFmt[i], "Min:" .. valFmt[i]
+        lastVal[i] = nil
+        if i <= STANDARD_SLOT_COUNT then
+            local name, unitText = textSlice(trim(cfg.sName[i]), 1, SLOT_NAME_VISIBLE), trim(cfg.sUnit[i])
+            pName[i], pLabel[i], pUnit[i] = name, name .. ":", unitText
+            nameLen[i], uLen[i] = charLen(name), charLen(unitText)
+            fmtBoth[i] = valFmt[i] .. escapeFormat(unitText)
+            fmtLine[i] = escapeFormat(name) .. ":" .. fmtBoth[i]
+            pShow[i] = cfg.sOn[i] == 1 and name ~= ""
         end
     end
-    local key = menuPage .. ":" .. selectedRow .. ":" .. editField .. ":" .. index
-    if char == " " and charPosKey == key and allowedCharList[charPos] == " " then
-        position = charPos
-    end
-    position = math.max(1, math.min(#allowedCharList, position + delta))
-    charPos, charPosKey = position, key
-    characters[index] = allowedCharList[position]
-    return joinCharacters(characters)
-end
-
-local function slotIndex()
-    if menuPage == 2 then return selectedRow end
-    if menuPage == 3 then return selectedRow + 6 end
-    return selectedRow + 9
-end
-
-local function isSensorPage()
-    return menuPage == 2 or menuPage == 3 or menuPage == 4
-end
-
-local function sensorSlotRows()
-    if menuPage == 3 then return 3 end
-    return 6
-end
-
-local function sensorColumnCount(row, page)
-    row, page = row or selectedRow, page or menuPage
-    if page == 1 and row >= 7 then return 2 end
-    if page == 2 and row <= 6 then return 6 end
-    if page == 4 and row <= 6 then return 3 end
-    if page == 3 and row <= 3 then return 6 end
-    if page == 3 and (row == 4 or row == 5) then return 2 end
-    return 1
-end
-
-local function menuContentRows()
-    if menuPage == 1 then return 8 end
-    if menuPage == 2 then return 6 end
-    if menuPage == 3 then return 6 end
-    if menuPage == 4 then return 6 end
-    return 6
-end
-
-local function menuRows()
-    return menuContentRows() + ((menuPage == 1) and 0 or 1)
-end
-
-local function moveHorizontal(delta)
-    local row = selectedRow
-    local column = selectedColumn + delta
-    local columnCount = sensorColumnCount()
-    if column < 1 then
-        row = math.max(1, row - 1)
-        column = sensorColumnCount(row)
-    elseif column > columnCount then
-        row = math.min(menuRows(), row + 1)
-        column = 1
-    end
-    if row ~= selectedRow then
-        selectedRow, selectedColumn = row, column
-    else
-        selectedColumn = math.max(1, math.min(sensorColumnCount(), column))
-    end
-end
-
-local function nextMenuPage()
-    if axisEditing then saveConfig() end
-    if menuPage == 2 then
-        menuPage, selectedRow = 3, 1
-    elseif menuPage == 3 then
-        menuPage, selectedRow = 4, 1
-    elseif menuPage == 4 then
-        menuPage, selectedRow = 1, 1
-    else
-        menuPage, selectedRow = 1, 1
-    end
-    selectedColumn = 1
-    axisEditing = false
-end
-
-local function cycleCatalogValue(source, delta)
-    local found = 1
-    local count = catalogCount()
-    for i = 1, count do
-        local entry = catalogEntryAt(i)
-        if string.lower(entry[1]) == string.lower(trim(source)) then
-            found = i
-            break
+    leftN = 0
+    for i = 1, 6 do
+        if pShow[i] and pSrc[i] ~= "" then
+            leftN = leftN + 1
+            leftActive[leftN] = i
         end
     end
-    found = math.max(1, math.min(count, found + delta))
-    local entry = catalogEntryAt(found)
-    return entry[1], entry[4]
+    leftStep = (leftN == 6) and 11 or ((leftN > 1) and math.floor(55 / (leftN - 1)) or 0)
 end
 
-local function cycleSlotSource(slot, delta)
-    sSrc[slot], sUnit[slot] = cycleCatalogValue(sSrc[slot], delta)
-    local customSlot = customSlotForSource(sSrc[slot])
-    if customSlot then sPrecision[slot] = sPrecision[customSlot] end
+local function startup()
+    local chunk = loadScript(DIR .. "horz_cfg")
+    if not chunk then return end
+    local C = chunk()
+    C.load(cfg)
+    prepare(C)
+    ready = true
 end
 
-local function cycleAxis(which, delta)
-    local current = (which == 1) and fwdAxis or ((which == 2) and sideAxis or downAxis)
-    local sign = string.sub(current, 2, 2)
-    local axes = { "X", "Y", "Z" }
-    local at = string.find("XYZ", string.sub(current, 1, 1), 1, true) or 1
-    local candidateAxis = axes[((at - 1 + delta) % 3) + 1]
-    local assignments = { fwdAxis, sideAxis, downAxis }
-    local owner
-    for i = 1, 3 do
-        if i ~= which and string.sub(assignments[i], 1, 1) == candidateAxis then owner = i end
-    end
-    if owner then
-        assignments[owner] = string.sub(current, 1, 1) .. string.sub(assignments[owner], 2, 2)
-    end
-    assignments[which] = candidateAxis .. sign
-    fwdAxis, sideAxis, downAxis = assignments[1], assignments[2], assignments[3]
-    return owner ~= nil
-end
-
-local function handleMenu(event)
-    if getTime() - menuOpenTime < MENU_OPEN_DEBOUNCE then return true end
-    local negative = event == EVT_MINUS_FIRST or event == EVT_ROT_LEFT or event == EVT_VIRTUAL_PREV
-    local positive = event == EVT_PLUS_FIRST or event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
-    local horizontalLeft = event == EVT_ROT_LEFT or
-        (EVT_LEFT ~= nil and event == EVT_LEFT) or
-        (EVT_VIRTUAL_LEFT ~= nil and event == EVT_VIRTUAL_LEFT)
-    local horizontalRight = event == EVT_ROT_RIGHT or
-        (EVT_RIGHT ~= nil and event == EVT_RIGHT) or
-        (EVT_VIRTUAL_RIGHT ~= nil and event == EVT_VIRTUAL_RIGHT)
-    if mmEditSlot then
-        if (negative or positive) and mmRow <= 2 then
-            local rotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
-                event == EVT_VIRTUAL_PREV or event == EVT_VIRTUAL_NEXT
-            local step = 10 ^ -sPrecision[mmEditSlot]
-            if not rotary then step = step * 10 end
-            local target = (mmRow == 1) and sMin or sMax
-            local value = target[mmEditSlot] + (positive and step or -step)
-            target[mmEditSlot] = math.max(-MM_LIMIT, math.min(MM_LIMIT,
-                roundToPrecision(value, sPrecision[mmEditSlot])))
-        elseif event == EVT_ENTER_BREAK then
-            if mmRow >= 3 then
-                mmEditSlot = nil
-                saveConfig()
-            else
-                mmRow = mmRow + 1
-            end
-        elseif event == EVT_EXIT_BREAK or event == EVT_ENTER_LONG then
-            mmEditSlot = nil
-            saveConfig()
-        end
-        return true
-    end
-    local sensorRow = isSensorPage() and selectedRow <= menuContentRows()
-    local configLinks = menuPage == 1 and selectedRow >= 7 and selectedRow <= 8
-    if editField == 0 and (sensorRow or configLinks) and (horizontalLeft or horizontalRight) then
-        local delta = horizontalRight and 1 or -1
-        moveHorizontal(delta)
-        return true
-    end
-    if editField > 0 then
-        if menuPage == 1 and (selectedRow == 2 or selectedRow == 4) and editField == 2 then
-            if negative or positive then
-                local source = (selectedRow == 2) and pitchSource or rollSource
-                source = cycleCatalogValue(source, positive and 1 or -1)
-                if selectedRow == 2 then pitchSource = source else rollSource = source end
-            elseif event == EVT_ENTER_BREAK or event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
-                editField = 0
-                saveConfig()
-            end
-            return true
-        end
-        if menuPage == 3 and selectedRow == 4 and editField == 4 then
-            if negative or positive then
-                insideSource = cycleCatalogValue(insideSource, positive and 1 or -1)
-            elseif event == EVT_ENTER_BREAK or event == EVT_EXIT_BREAK then
-                editField = 0
-                saveConfig()
-            end
-            return true
-        end
-        if menuPage == 3 and selectedRow == 6 and editField == 5 then
-            if negative or positive then
-                altimeterSource = cycleCatalogValue(altimeterSource, positive and 1 or -1)
-            elseif event == EVT_ENTER_BREAK or event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
-                editField = 0
-                saveConfig()
-            end
-            return true
-        end
-        if menuPage == 3 and selectedRow == 5 and editField == 6 then
-            if negative or positive then
-                -- Drehgeber: 1 s, +/- Tasten: 10 s
-                local isRotary = event == EVT_ROT_LEFT or event == EVT_ROT_RIGHT or
-                    event == EVT_VIRTUAL_PREV or event == EVT_VIRTUAL_NEXT
-                local step = (isRotary and 1 or 10) * (positive and 1 or -1)
-                graphSeconds = math.max(10, math.min(999, graphSeconds + step))
-            elseif event == EVT_ENTER_BREAK or event == EVT_ENTER_LONG or event == EVT_EXIT_BREAK then
-                editField = 0
-                saveConfig()
-            end
-            return true
-        end
-        if menuPage == 4 and selectedRow <= 6 then
-            local slot = slotIndex()
-            if editField == 1 or editField == 4 then
-                local values = (editField == 1) and sName or sUnit
-                local maxChars = (editField == 1) and SLOT_NAME_MAX or 3
-                if negative or positive then
-                    values[slot] = changeChar(padStr(values[slot], maxChars), editCharIdx,
-                        negative and -1 or 1)
-                    sSrc[slot] = trim(sName[slot])
-                elseif event == EVT_ENTER_BREAK then
-                    editCharIdx = editCharIdx + 1
-                    if editCharIdx > maxChars then
-                        editCharIdx, editField = 1, 0
-                        saveConfig()
-                    end
-                elseif event == EVT_EXIT_BREAK then
-                    editField = 0
-                    saveConfig()
-                end
-            elseif editField == 3 then
-                if negative or positive then
-                    sPrecision[slot] = math.max(0, math.min(4,
-                        sPrecision[slot] + (positive and 1 or -1)))
-                elseif event == EVT_ENTER_BREAK or event == EVT_EXIT_BREAK then
-                    editField = 0
-                    saveConfig()
-                end
-            end
-            return true
-        end
-        if menuPage == 2 or (menuPage == 3 and selectedRow <= 3) then
-            local slot = slotIndex()
-            if editField == 1 then
-                if negative or positive then
-                    sName[slot] = changeChar(padStr(sName[slot], SLOT_NAME_MAX), editCharIdx,
-                        negative and -1 or 1)
-                elseif event == EVT_ENTER_BREAK then
-                    editCharIdx = editCharIdx + 1
-                    if editCharIdx > SLOT_NAME_MAX then
-                        editCharIdx, editField, selectedColumn = 1, 0, 2
-                        saveConfig()
-                    end
-                end
-            elseif editField == 2 then
-                if negative or positive then
-                    cycleSlotSource(slot, positive and 1 or -1)
-                elseif event == EVT_ENTER_BREAK then
-                    editField = 0
-                    saveConfig()
-                end
-            elseif editField == 3 then
-                if negative or positive then
-                    sPrecision[slot] = math.max(0, math.min(4,
-                        sPrecision[slot] + (positive and 1 or -1)))
-                elseif event == EVT_ENTER_BREAK then
-                    editField = 0
-                    saveConfig()
-                end
-            end
-            if event == EVT_EXIT_BREAK then
-                editField = 0
-                saveConfig()
-            end
-            return true
-        end
-        return true
-    end
-
-    if menuPage == 5 and axisEditing and selectedRow <= 3 and (negative or positive) then
-        if cycleAxis(selectedRow, positive and 1 or -1) then
-            axisMessage = "Axes changed"
-        else
-            axisMessage = ""
-        end
-    elseif negative or positive then
-        local delta = positive and 1 or -1
-        selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
-        if isSensorPage() or menuPage == 1 then
-            selectedColumn = 1
-        end
-    elseif event == EVT_PAGE_BREAK then
-        if menuPage ~= 1 then nextMenuPage() end
-    elseif event == EVT_EXIT_BREAK then
-        if menuPage ~= 1 then
-            saveConfig()
-            menuPage, selectedRow, selectedColumn = 1, 1, 1
-            axisEditing = false
-        else
-            saveConfig()
-            menuActive = false
-            axisEditing = false
-        end
-    elseif event == EVT_ENTER_BREAK then
-        if selectedRow > menuContentRows() then
-            nextMenuPage()
-        elseif menuPage == 1 then
-            if selectedRow == 1 then
-                groundMode = (groundMode + 1) % 3
-                saveConfig()
-            elseif selectedRow == 2 or selectedRow == 4 then
-                if attitudeMode ~= 2 then editField = 2 end
-            elseif selectedRow == 3 then
-                invPitch = 1 - invPitch
-                saveConfig()
-            elseif selectedRow == 5 then
-                invRoll = 1 - invRoll
-                saveConfig()
-            elseif selectedRow == 6 then
-                invHdg = 1 - invHdg
-                saveConfig()
-            elseif selectedRow == 7 then
-                if selectedColumn == 1 then
-                    menuPage, selectedRow = 2, 1
-                else
-                    menuPage, selectedRow = 5, 1
-                end
-                selectedColumn = 1
-            elseif selectedRow == 8 then
-                if selectedColumn == 1 then
-                    attitudeMode = (attitudeMode == 1) and 2 or 1
-                else
-                    viewMode = 1 - viewMode
-                end
-                saveConfig()
-            end
-        elseif isSensorPage() then
-            if selectedRow <= sensorSlotRows() then
-                if menuPage == 4 then
-                    if selectedColumn == 1 then
-                        editField, editCharIdx = 1, 1
-                    elseif selectedColumn == 2 then
-                        editField, editCharIdx = 4, 1
-                    elseif selectedColumn == 3 then
-                        editField = 3
-                    end
-                elseif selectedColumn == 1 then
-                    editField, editCharIdx = 1, 1
-                elseif selectedColumn == 2 or selectedColumn == 3 then
-                    editField = 2
-                elseif selectedColumn == 4 then
-                    editField = 3
-                elseif selectedColumn == 5 then
-                    mmEditSlot = slotIndex()
-                    mmRow = 1
-                elseif selectedColumn == 6 then
-                    local slot = slotIndex()
-                    sOn[slot] = 1 - sOn[slot]
-                    saveConfig()
-                end
-            elseif menuPage == 3 and selectedRow == 4 then
-                if selectedColumn == 1 then editField = 4
-                else
-                    insideEnabled = 1 - insideEnabled
-                    saveConfig()
-                end
-            elseif menuPage == 3 and selectedRow == 5 then
-                if selectedColumn == 1 then
-                    graphEnabled = 1 - graphEnabled
-                    saveConfig()
-                else
-                    editField = 6
-                end
-            elseif menuPage == 3 and selectedRow == 6 then
-                editField = 5
-            end
-        elseif menuPage == 5 then
-            if selectedRow == 5 then
-                attitudeMode = (attitudeMode == 1) and 2 or 1
-                saveConfig()
-            elseif selectedRow == 4 then
-                viewMode = 1 - viewMode
-                saveConfig()
-            elseif selectedRow <= 3 then
-                if axisEditing then
-                    local axis = (selectedRow == 1 and fwdAxis) or (selectedRow == 2 and sideAxis) or downAxis
-                    local value = string.sub(axis, 1, 1) ..
-                        ((string.sub(axis, 2, 2) == "+") and "-" or "+")
-                    if selectedRow == 1 then
-                        fwdAxis = value
-                    elseif selectedRow == 2 then
-                        sideAxis = value
-                    else
-                        downAxis = value
-                    end
-                    axisEditing = false
-                    saveConfig()
-                else
-                    axisEditing = true
-                    axisMessage = ""
-                end
-            elseif selectedRow == 6 then
-                calibrationStep = 1
-                calibrationLevel = nil
-                calibrationMessage = ""
-            end
-        end
-    end
+local function reprepare()
+    local chunk = loadScript(DIR .. "horz_cfg")
+    if not chunk then return false end
+    prepare(chunk())
     return true
 end
 
 local function vectorValues()
-    return {
-        tonumber(getValue("AccX")) or 0,
-        tonumber(getValue("AccY")) or 0,
-        tonumber(getValue("AccZ")) or 0
-    }
-end
-
-local function vectorMagnitude(values)
-    return math.sqrt(values[1] * values[1] + values[2] * values[2] + values[3] * values[3])
-end
-
-local function axisValue(values, setting)
-    local index = string.sub(setting, 1, 1) == "X" and 1 or
-        (string.sub(setting, 1, 1) == "Y" and 2 or 3)
-    return values[index] * ((string.sub(setting, 2, 2) == "-") and -1 or 1)
-end
-
-local function calibrate(event)
-    local values = vectorValues()
-    if calibrationStep == 1 and event == EVT_ENTER_BREAK then
-        local magnitude = vectorMagnitude(values)
-        if magnitude < 0.001 then
-            calibrationMessage = "no Acc-Signal"
-            return
-        end
-        local index = 1
-        if math.abs(values[2]) > math.abs(values[index]) then index = 2 end
-        if math.abs(values[3]) > math.abs(values[index]) then index = 3 end
-        local axis = ({ "X", "Y", "Z" })[index]
-        downAxis = axis .. ((values[index] >= 0) and "+" or "-")
-        calibrationLevel = { values = values, down = index, magnitude = magnitude }
-        calibrationStep = 2
-        calibrationMessage = "Level set"
-    elseif calibrationStep == 2 and (event == EVT_ENTER_BREAK) then
-        local remain = {}
-        for i = 1, 3 do if i ~= calibrationLevel.down then remain[#remain + 1] = i end end
-        local magnitude = vectorMagnitude(values)
-        local tilt = math.sqrt(values[remain[1]] ^ 2 + values[remain[2]] ^ 2)
-        if magnitude < calibrationLevel.magnitude * 0.5 then
-            calibrationMessage = "no Acc-Signal"
-            return
-        end
-        if tilt < magnitude * 0.15 then
-            calibrationMessage = "turn nose more"
-            return
-        end
-        local forward = (math.abs(values[remain[1]]) >= math.abs(values[remain[2]])) and remain[1] or remain[2]
-        local other = (forward == remain[1]) and remain[2] or remain[1]
-        fwdAxis = ({ "X", "Y", "Z" })[forward] .. ((values[forward] >= 0) and "+" or "-")
-        local fSign = string.sub(fwdAxis, 2, 2) == "+" and 1 or -1
-        local dSign = string.sub(downAxis, 2, 2) == "+" and 1 or -1
-        local fVec = { 0, 0, 0 }; fVec[forward] = fSign
-        local sideVector = { 0, 0, 0 }
-        sideVector[other] = 1
-        local cross = {
-            fVec[2] * sideVector[3] - fVec[3] * sideVector[2],
-            fVec[3] * sideVector[1] - fVec[1] * sideVector[3],
-            fVec[1] * sideVector[2] - fVec[2] * sideVector[1]
-        }
-        local sideSign = (cross[calibrationLevel.down] * dSign >= 0) and 1 or -1
-        sideAxis = ({ "X", "Y", "Z" })[other] .. ((sideSign > 0) and "+" or "-")
-        calibrationStep = 0
-        calibrationLevel = nil
-        calibrationMessage = "Calibration OK"
-        saveConfig()
-    end
-end
-
-local function editDisplay(value, length, selectedIndex)
-    local padded = padStr(value, length)
-    local index = selectedIndex or editCharIdx
-    return textSlice(padded, 1, index - 1) .. "[" ..
-        textSlice(padded, index, index) .. "]" ..
-        textSlice(padded, index + 1)
-end
-
-local function drawMenu(event)
-    local titles = {
-        "--CONFIG PAGE--", "--Sensors Left 1/3--",
-        "--Sensors Right 2/3--", "--Custom Sensors 3/3--",
-        "--AXIS SETTING--"
-    }
-    if mmEditSlot then
-        lcd.drawText(1, 1, "-- SENSOR MIN/MAX --", INVERS + SMLSIZE)
-        lcd.drawText(1, 13, trim(sName[mmEditSlot]) .. " / " .. trim(sSrc[mmEditSlot]), SMLSIZE)
-        lcd.drawText(1, 25, (mmRow == 1 and ">" or " ") .. "MIN: " ..
-            string.format("%." .. sPrecision[mmEditSlot] .. "f", sMin[mmEditSlot]), SMLSIZE)
-        lcd.drawText(1, 37, (mmRow == 2 and ">" or " ") .. "MAX: " ..
-            string.format("%." .. sPrecision[mmEditSlot] .. "f", sMax[mmEditSlot]), SMLSIZE)
-        lcd.drawText(1, 52, (mmRow == 3 and ">" or " ") .. "Done", SMLSIZE)
-        lcd.drawText(74, 52, "ENTER: next", SMLSIZE)
-        return
-    end
-    local heading = configSaveFailed and "SAVE FAILED" or
-        (configLoadWarning and "OLD CFG: DEFAULTS" or titles[menuPage])
-    lcd.drawText(1, 1, heading, INVERS + SMLSIZE)
-    if calibrationStep > 0 then
-        local values = vectorValues()
-        lcd.drawText(1, 13, calibrationStep == 1 and "hold Model straigt" or "turn nose down", 0)
-        lcd.drawText(1, 24, string.format("X:%.1f Y:%.1f Z:%.1f",
-            tonumber(values[1]) or 0, tonumber(values[2]) or 0, tonumber(values[3]) or 0), SMLSIZE)
-        lcd.drawText(1, 36, calibrationMessage, INVERS)
-        lcd.drawText(1, 50, "ENTER: measure EXIT: end", SMLSIZE)
-        return
-    end
-    if menuPage == 1 then
-        local function line(n) return 9 + (n - 1) * 8 end
-        local function checkbox(y, on, selected)
-            lcd.drawText(80, y, "inv:", SMLSIZE)
-            lcd.drawText(104, y, on and "[X]" or "[ ]", selected and INVERS or 0)
-        end
-        lcd.drawText(8, line(1), "Ground as:", (selectedRow == 1) and INVERS or 0)
-        lcd.drawText(73, line(1), ({ "White", "Lines", "Points" })[groundMode + 1], 0)
-        for k = 0, 1 do
-            local item, y = 2 + k * 2, line(2 + k)
-            local source = (k == 0) and pitchSource or rollSource
-            lcd.drawText(8, y, (k == 0) and "Pitch:" or "Roll:",
-                (selectedRow == item and editField == 0) and INVERS or 0)
-            local sourceText = (attitudeMode == 2) and "----" or source
-            lcd.drawText(48, y, sourceText,
-                (attitudeMode == 2) and SMLSIZE or
-                ((selectedRow == item and editField == 2) and INVERS or 0))
-            checkbox(y, ((k == 0) and invPitch or invRoll) == 1, selectedRow == item + 1)
-        end
-        lcd.drawText(8, line(4), "Heading:", 0)
-        checkbox(line(4), invHdg == 1, selectedRow == 6)
-        local sensorsFlags = (selectedRow == 7 and selectedColumn == 1) and INVERS or 0
-        local axesFlags = (selectedRow == 7 and selectedColumn == 2) and INVERS or 0
-        local attitudeFlags = (selectedRow == 8 and selectedColumn == 1) and INVERS or 0
-        local viewFlags = (selectedRow == 8 and selectedColumn == 2) and INVERS or 0
-        lcd.drawText(8, line(5), "SENSORS", sensorsFlags + SMLSIZE)
-        lcd.drawText(78, line(5), "AXES", axesFlags + SMLSIZE)
-        lcd.drawText(8, line(6), "ATTITUDE:" ..
-            ((attitudeMode == 1) and "ANGLES" or "VECTOR"), attitudeFlags + SMLSIZE)
-        lcd.drawText(78, line(6), "BOX:" ..
-            ((viewMode == 1) and "FULL" or "SIMPLE"), viewFlags + SMLSIZE)
-    elseif isSensorPage() then
-        local first, last
-        if menuPage == 2 then
-            first, last = 1, 6
-        elseif menuPage == 3 then
-            first, last = 7, 9
-        else
-            first, last = 10, 15
-        end
-        local headerY = 8
-        if menuPage == 4 then
-            lcd.drawText(4, headerY, "Name", INVERS + SMLSIZE)
-            lcd.drawText(52, headerY, "Unit", INVERS + SMLSIZE)
-            lcd.drawText(86, headerY, "Prec", INVERS + SMLSIZE)
-        else
-            lcd.drawText(4, headerY, "Name", INVERS + SMLSIZE)
-            lcd.drawText(27, headerY, "Src", INVERS + SMLSIZE)
-            lcd.drawText(52, headerY, "Uni", INVERS + SMLSIZE)
-            lcd.drawText(69, headerY, "Prec", INVERS + SMLSIZE)
-            lcd.drawText(94, headerY, "MM", INVERS + SMLSIZE)
-            lcd.drawText(108, headerY, "ON", INVERS + SMLSIZE)
-        end
-        for i = first, last do
-            local row = (menuPage == 2) and i or
-                ((menuPage == 3) and (i - 6) or (i - 9))
-            local y = 15 + (row - 1) * 7
-            local selected = row == selectedRow
-            local editing = selected and editField > 0
-            local fullName = padStr(editing and sName[i] or trim(sName[i]), SLOT_NAME_MAX)
-            local isCustomPage = menuPage == 4
-            local name = textSlice(fullName, 1, SLOT_NAME_VISIBLE)
-            if isCustomPage and trim(name) == "" then name = "____" end
-            local nameText = name
-            if selected and editField == 1 then
-                local start = math.max(1, math.min(editCharIdx - SLOT_NAME_VISIBLE + 1,
-                    SLOT_NAME_MAX - SLOT_NAME_VISIBLE + 1))
-                nameText = editDisplay(textSlice(fullName, start, start + SLOT_NAME_VISIBLE - 1),
-                    SLOT_NAME_VISIBLE, editCharIdx - start + 1)
-            end
-            lcd.drawText(0, y, selected and ">" or " ", SMLSIZE)
-            lcd.drawText(4, y, nameText, SMLSIZE +
-                ((selected and selectedColumn == 1) and INVERS or 0))
-            if isCustomPage then
-                local unit = (selected and editField == 4) and
-                    editDisplay(padStr(sUnit[i], 3), 3, editCharIdx) or trim(sUnit[i])
-                if unit == "" then unit = "___" end
-                lcd.drawText(52, y, unit, SMLSIZE +
-                    ((selected and selectedColumn == 2) and INVERS or 0))
-                lcd.drawText(86, y, tostring(sPrecision[i]),
-                    SMLSIZE + ((selected and selectedColumn == 3) and INVERS or 0))
-            else
-                lcd.drawText(27, y, trim(sSrc[i]),
-                    SMLSIZE + ((selected and selectedColumn == 2) and INVERS or 0))
-                lcd.drawText(52, y, trim(sUnit[i]),
-                    SMLSIZE + ((selected and selectedColumn == 3) and INVERS or 0))
-                lcd.drawText(69, y, tostring(sPrecision[i]),
-                    SMLSIZE + ((selected and selectedColumn == 4) and INVERS or 0))
-                lcd.drawText(92, y, " =",
-                    SMLSIZE + ((selected and selectedColumn == 5) and INVERS or 0))
-                lcd.drawText(107, y, (sOn[i] == 1) and "[X]" or "[ ]",
-                    SMLSIZE + ((selected and selectedColumn == 6) and INVERS or 0))
-            end
-        end
-        if menuPage == 3 then
-            local sourceRowY, graphRowY, altimeterRowY = 36, 43, 50
-            local sourceSelected = selectedRow == 4
-            lcd.drawText(0, sourceRowY, sourceSelected and ">" or " ", SMLSIZE)
-            lcd.drawText(4, sourceRowY, "inside Horiz:",
-                SMLSIZE + ((sourceSelected and selectedColumn == 1) and INVERS or 0))
-            lcd.drawText(68, sourceRowY, insideSource,
-                SMLSIZE + ((sourceSelected and selectedColumn == 1) and INVERS or 0))
-            lcd.drawText(105, sourceRowY, (insideEnabled == 1) and " [X]" or " [ ]",
-                SMLSIZE + ((sourceSelected and selectedColumn == 2) and INVERS or 0))
-            local graphSelected = selectedRow == 5
-            lcd.drawText(0, graphRowY, graphSelected and ">" or " ", SMLSIZE)
-            lcd.drawText(1, graphRowY, " Graph", SMLSIZE)
-            lcd.drawText(29, graphRowY, (graphEnabled == 1) and "[X]" or "[ ]",
-                SMLSIZE + ((graphSelected and selectedColumn == 1) and INVERS or 0))
-            lcd.drawText(48, graphRowY, "X-Time:", SMLSIZE)
-            lcd.drawText(91, graphRowY, "[" .. graphSeconds .. "]",
-                SMLSIZE + ((graphSelected and selectedColumn == 2) and INVERS or 0))
-            local altimeterSelected = selectedRow == 6
-            lcd.drawText(0, altimeterRowY, altimeterSelected and ">" or " ", SMLSIZE)
-            lcd.drawText(4, altimeterRowY, "Altimeter-Scale:",
-                SMLSIZE + ((altimeterSelected and selectedColumn == 1) and INVERS or 0))
-            lcd.drawText(83, altimeterRowY, altimeterSource,
-                SMLSIZE + ((altimeterSelected and selectedColumn == 1) and INVERS or 0))
-            if selectedRow == 5 and selectedColumn == 1 then
-                lcd.drawText(1, 57, " Graph?only1LSensor", SMLSIZE)
-            end
-        end
-    else
-        local rows = {
-            "Forward: " .. fwdAxis, "Side: " .. sideAxis, "Down: " .. downAxis,
-            "BOX: " .. ((viewMode == 1) and "FULL" or "SIMPLE"),
-            "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR"),
-            "Calibrate Attitude"
-        }
-        for i = 1, #rows do
-            local y = 10 + (i - 1) * 8
-            local selected = i == selectedRow
-            lcd.drawText(1, y, (selected and "> " or "  ") .. rows[i], selected and INVERS or 0)
-        end
-        if selectedRow ~= 6 then
-            if calibrationMessage ~= "" then
-                lcd.drawText(9, 56, calibrationMessage, SMLSIZE)
-            elseif axisMessage ~= "" then
-                lcd.drawText(1, 50, axisMessage, SMLSIZE)
-            end
-        end
-    end
-    if menuPage ~= 1 then
-        local scrollSelected = selectedRow > menuContentRows()
-        lcd.drawText(1, 58, scrollSelected and ">" or " ", scrollSelected and INVERS or 0)
-        lcd.drawText(127, 58, "[scroll]", SMLSIZE + RIGHT +
-            (scrollSelected and INVERS or 0))
-    end
+    vec[1] = tonumber(getValue("AccX")) or 0
+    vec[2] = tonumber(getValue("AccY")) or 0
+    vec[3] = tonumber(getValue("AccZ")) or 0
+    return vec
 end
 
 local function init()
-    menuActive, menuPage, selectedRow = false, 1, 1
-    selectedColumn = 1
-    editField, editCharIdx, menuOpenTime = 0, 1, 0
-    mmEditSlot, mmRow = nil, 1
-    axisEditing = false
-    calibrationStep, calibrationLevel, calibrationMessage = 0, nil, ""
-    axisMessage, configSaveFailed = "", false
-    configLoadWarning = false
-    configLoaded = false
+    menu, menuFailUntil, ready, dirty = nil, 0, false, false
     sessionMin, sessionMax, sessionSource = {}, {}, {}
     sparkBuf, sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
         {}, 0, 0, 0, 0, nil, 0
+    startup()
+    collectgarbage()
+    memInit = collectgarbage("count")
+    memPeak = memInit
 end
 
-local function readSlot(source, unit)
-    if trim(source) == "" then return 0, "%.1f" end
+local function readSlot(source)
     local raw = getValue(source)
     if type(raw) == "table" then
         local total = 0
         for _, value in ipairs(raw) do total = total + (tonumber(value) or 0) end
         raw = total
     end
-    local value = tonumber(raw) or 0
-    local fmt, scale = "%.1f", 1
-    local entry = catalogEntry(source)
-    if entry then
-        fmt, scale = entry[2], entry[3]
-    end
-    if string.lower(source) == "gspd" and trim(unit) ~= "kmh" then scale = 1 end
-    return value * scale, fmt
+    return tonumber(raw) or 0
 end
 
 local satelliteBase = {
@@ -1193,26 +274,24 @@ local function homeDirection(lat, lon)
     local bearing = (atan2(bearingY, bearingX) / toRadians) % 360
     return bearing, distance
 end
+local function drawFilledSideArrow(x, direction, topY)
+    for row = -3, 3 do
+        local inset = math.abs(row)
+        if direction == "left" then
+            lcd.drawLine(x, topY + 4 + row, x + 4 - inset, topY + 4 + row, SOLID, FORCE)
+        else
+            lcd.drawLine(x - 4 + inset, topY + 4 + row, x, topY + 4 + row, SOLID, FORCE)
+        end
+    end
+end
 
 local function drawHomePointer(bearing, heading, cx, topY, sizeW)
     local delta = ((bearing - heading + 180) % 360) - 180
     local visibleLimit = (sizeW - 1) / COMPASS_PIXELS_PER_DEGREE
-    local function drawFilledSideArrow(x, direction)
-        for row = -3, 3 do
-            local inset = math.abs(row)
-            if direction == "left" then
-                lcd.drawLine(x, topY + 4 + row, x + 4 - inset, topY + 4 + row, SOLID, FORCE)
-            else
-                lcd.drawLine(x - 4 + inset, topY + 4 + row, x, topY + 4 + row, SOLID, FORCE)
-            end
-        end
-    end
     if delta < -visibleLimit then
-        local x = cx - sizeW
-        drawFilledSideArrow(x, "left")
+        drawFilledSideArrow(cx - sizeW, "left", topY)
     elseif delta > visibleLimit then
-        local x = cx + sizeW - 1
-        drawFilledSideArrow(x, "right")
+        drawFilledSideArrow(cx + sizeW - 1, "right", topY)
     else
         local x = math.floor(cx + delta * COMPASS_PIXELS_PER_DEGREE + 0.5)
         for row = 0, 3 do
@@ -1225,11 +304,11 @@ end
 local function getAttitude()
     local pitch, roll
     if attitudeMode == 1 then
-        pitch = (trim(pitchSource) ~= "") and (tonumber(getValue(pitchSource)) or 0) or 0
-        roll = (trim(rollSource) ~= "") and (tonumber(getValue(rollSource)) or 0) or 0
+        pitch = (pitchSrc ~= "") and (tonumber(getValue(pitchSrc)) or 0) or 0
+        roll = (rollSrc ~= "") and (tonumber(getValue(rollSrc)) or 0) or 0
     else
         local values = vectorValues()
-        local fwd, side, down = axisValue(values, fwdAxis), axisValue(values, sideAxis), axisValue(values, downAxis)
+        local fwd, side, down = values[axI[1]] * axS[1], values[axI[2]] * axS[2], values[axI[3]] * axS[3]
         local magnitude = math.sqrt(fwd * fwd + side * side + down * down)
         if magnitude > 0.001 then
             fwd, side, down = fwd / magnitude, side / magnitude, down / magnitude
@@ -1244,74 +323,83 @@ local function getAttitude()
     return pitch, roll
 end
 
+-- Zustand der 3D-Ansicht (Modulebene statt Closures/Tabellen pro Frame)
+local aLeft, aRight, aTop, aBottom, aCx, aCy, aFocal, aRoll, aPitch = 0, 0, 0, 0, 0, 0, 0, 0, 0
+local p1x, p1y, p2x, p2y, pCount = 0, 0, 0, 0, 0
+local MARKS = { -45, 0, 45 }
+
+local function addPoint(x, y)
+    if pCount < 2 and x >= aLeft - 0.01 and x <= aRight + 0.01 and
+        y >= aTop - 0.01 and y <= aBottom + 0.01 then
+        if pCount == 1 and math.abs(p1x - x) < 0.1 and math.abs(p1y - y) < 0.1 then
+            return
+        end
+        pCount = pCount + 1
+        if pCount == 1 then
+            p1x, p1y = x, y
+        else
+            p2x, p2y = x, y
+        end
+    end
+end
+
+local function planeLine(angle, dotted, dashed)
+    local p = angle * 0.01745329252
+    local a = -math.sin(aRoll) * math.cos(p)
+    local b = math.cos(aRoll) * math.cos(p)
+    local c = -aFocal * math.sin(p)
+    if dotted and math.abs(a) < 0.0001 and math.abs(b) < 0.0001 then
+        local y = (angle > aPitch) and aTop or aBottom
+        if dashed then
+            for x = aLeft, aRight, 4 do
+                lcd.drawLine(x, y, math.min(x + 2, aRight), y, SOLID, FORCE)
+            end
+        else
+            for x = aLeft, aRight, 2 do lcd.drawPoint(x, y) end
+        end
+        return
+    end
+    pCount = 0
+    if math.abs(b) > 0.0001 then
+        addPoint(aLeft, aCy - (a * (aLeft - aCx) + c) / b)
+        addPoint(aRight, aCy - (a * (aRight - aCx) + c) / b)
+    end
+    if math.abs(a) > 0.0001 then
+        addPoint(aCx - (b * (aTop - aCy) + c) / a, aTop)
+        addPoint(aCx - (b * (aBottom - aCy) + c) / a, aBottom)
+    end
+    if pCount < 2 then return end
+
+    if dotted then
+        local steps = math.max(math.abs(p2x - p1x), math.abs(p2y - p1y))
+        if steps < 1 then return end
+        local spacing = dashed and 4 or 2
+        for i = 0, math.floor(steps), spacing do
+            if dashed then
+                local endT = math.min(steps, i + 2) / steps
+                local startT = i / steps
+                lcd.drawLine(p1x + (p2x - p1x) * startT, p1y + (p2y - p1y) * startT,
+                    p1x + (p2x - p1x) * endT, p1y + (p2y - p1y) * endT, SOLID, FORCE)
+            else
+                local t = i / steps
+                lcd.drawPoint(p1x + (p2x - p1x) * t, p1y + (p2y - p1y) * t)
+            end
+        end
+    else
+        lcd.drawLine(p1x, p1y, p2x, p2y, SOLID, FORCE)
+    end
+end
+
 local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     local left, right = cx - sizeW + 1, cx + sizeW - 1
     local top, bottom = cy - sizeH + 1, cy + sizeH - 1
-    local focal = sizeW
-    local pitchRad, rollRad = pitch * 0.01745329252, roll * 0.01745329252
+    local pitchRad = pitch * 0.01745329252
+    aLeft, aRight, aTop, aBottom, aCx, aCy = left, right, top, bottom, cx, cy
+    aFocal, aRoll, aPitch = sizeW, roll * 0.01745329252, pitch
 
-    local function planeLine(angle, dotted, dashed)
-        local p = angle * 0.01745329252
-        local a = -math.sin(rollRad) * math.cos(p)
-        local b = math.cos(rollRad) * math.cos(p)
-        local c = -focal * math.sin(p)
-        if dotted and math.abs(a) < 0.0001 and math.abs(b) < 0.0001 then
-            local y = (angle > pitch) and top or bottom
-            if dashed then
-                for x = left, right, 4 do
-                    lcd.drawLine(x, y, math.min(x + 2, right), y, SOLID, FORCE)
-                end
-            else
-                for x = left, right, 2 do lcd.drawPoint(x, y) end
-            end
-            return
-        end
-        local points = {}
-        local function addPoint(x, y)
-            if x >= left - 0.01 and x <= right + 0.01 and
-                y >= top - 0.01 and y <= bottom + 0.01 then
-                for i = 1, #points do
-                    if math.abs(points[i][1] - x) < 0.1 and math.abs(points[i][2] - y) < 0.1 then
-                        return
-                    end
-                end
-                points[#points + 1] = { x, y }
-            end
-        end
-        if math.abs(b) > 0.0001 then
-            addPoint(left, cy - (a * (left - cx) + c) / b)
-            addPoint(right, cy - (a * (right - cx) + c) / b)
-        end
-        if math.abs(a) > 0.0001 then
-            addPoint(cx - (b * (top - cy) + c) / a, top)
-            addPoint(cx - (b * (bottom - cy) + c) / a, bottom)
-        end
-        if #points < 2 then return end
-
-        local x1, y1, x2, y2 = points[1][1], points[1][2], points[2][1], points[2][2]
-        if dotted then
-            local steps = math.max(math.abs(x2 - x1), math.abs(y2 - y1))
-            if steps < 1 then return end
-            local spacing = dashed and 4 or 2
-            for i = 0, math.floor(steps), spacing do
-                if dashed then
-                    local endT = math.min(steps, i + 2) / steps
-                    local startT = i / steps
-                    lcd.drawLine(x1 + (x2 - x1) * startT, y1 + (y2 - y1) * startT,
-                        x1 + (x2 - x1) * endT, y1 + (y2 - y1) * endT, SOLID, FORCE)
-                else
-                    local t = i / steps
-                    lcd.drawPoint(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
-                end
-            end
-        else
-            lcd.drawLine(x1, y1, x2, y2, SOLID, FORCE)
-        end
-    end
-
-    local a = -math.sin(rollRad) * math.cos(pitchRad)
-    local b = math.cos(rollRad) * math.cos(pitchRad)
-    local c = -focal * math.sin(pitchRad)
+    local a = -math.sin(aRoll) * math.cos(pitchRad)
+    local b = math.cos(aRoll) * math.cos(pitchRad)
+    local c = -aFocal * math.sin(pitchRad)
     for y = top, bottom do
         local row = y - cy
         local leftGround, rightGround = left, right
@@ -1343,25 +431,19 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
     planeLine(pitch - 90, true, true)
     planeLine(pitch + 90, true, true)
 
-    -- Dezente 45°- und 90°-Marken mit beweglicher Pitch-/Roll-Anzeige.
-    local pitchMarks = { -90, -45, 0, 45, 90 }
-    for i = 1, #pitchMarks do
-        if math.abs(pitchMarks[i]) < 90 then
-            local y = cy - (pitchMarks[i] / 90) * sizeH
-            lcd.drawLine(left + 1, y, left + 2, y, SOLID, FORCE)
-            lcd.drawLine(right - 1, y, right - 2, y, SOLID, FORCE)
-        end
+    -- Dezente 45°-Marken mit beweglicher Pitch-/Roll-Anzeige.
+    for i = 1, 3 do
+        local y = cy - (MARKS[i] / 90) * sizeH
+        lcd.drawLine(left + 1, y, left + 2, y, SOLID, FORCE)
+        lcd.drawLine(right - 1, y, right - 2, y, SOLID, FORCE)
     end
     local pitchY = cy - (math.max(-90, math.min(90, pitch)) / 90) * sizeH
     lcd.drawLine(left + 2, pitchY - 1, left + 2, pitchY + 1, SOLID, FORCE)
     lcd.drawLine(right - 2, pitchY - 1, right - 2, pitchY + 1, SOLID, FORCE)
-    local rollMarks = { -90, -45, 0, 45, 90 }
-    for i = 1, #rollMarks do
-        if math.abs(rollMarks[i]) < 90 then
-            local x = cx + (rollMarks[i] / 90) * sizeW
-            lcd.drawLine(x, top + 1, x, top + 2, SOLID, FORCE)
-            lcd.drawLine(x, bottom - 1, x, bottom - 2, SOLID, FORCE)
-        end
+    for i = 1, 3 do
+        local x = cx + (MARKS[i] / 90) * sizeW
+        lcd.drawLine(x, top + 1, x, top + 2, SOLID, FORCE)
+        lcd.drawLine(x, bottom - 1, x, bottom - 2, SOLID, FORCE)
     end
     local rollX = cx + (math.max(-90, math.min(90, roll)) / 90) * sizeW
     lcd.drawLine(rollX - 1, top + 2, rollX + 1, top + 2, SOLID, FORCE)
@@ -1369,39 +451,37 @@ local function draw3DAttitude(cx, cy, sizeW, sizeH, pitch, roll)
 end
 
 -- Linke Spalte (Slots 1..6): passt sich der Zahl aktiver Slots an
-local leftActive = {}
 local FONTS_BIG = { { MIDSIZE, 8 }, { 0, 6 }, { SMLSIZE, 5 } }
 local FONTS_NORMAL = { { 0, 6 }, { SMLSIZE, 5 } }
 
-local function pickFont(text, limit, fonts)
-    local len = textLength(text)
-    for _, f in ipairs(fonts) do
-        if len * f[2] <= limit then return f[1] end
+local function pickFont(len, limit, fonts)
+    for k = 1, #fonts do
+        if len * fonts[k][2] <= limit then return fonts[k][1] end
     end
     return SMLSIZE
 end
 
-local function drawName(x, y, name, limit)
-    local len = textLength(name)
+local function drawName(x, y, i, limit)
+    local len = nameLen[i]
     if len * 8 + 8 <= limit then
-        lcd.drawText(x, y, name .. ":", MIDSIZE)
+        lcd.drawText(x, y, pLabel[i], MIDSIZE)
     elseif len * 8 <= limit then
-        lcd.drawText(x, y, name, MIDSIZE)
+        lcd.drawText(x, y, pName[i], MIDSIZE)
     else
-        lcd.drawText(x, y, name .. ":", pickFont(name .. ":", limit, FONTS_BIG))
+        lcd.drawText(x, y, pLabel[i], pickFont(len + 1, limit, FONTS_BIG))
     end
 end
 
 -- Wert immer MIDSIZE, Einheit klein dahinter; nur wenn es nicht passt: Fallback nach Breite
-local function drawBigValue(x, y, both, value, unit, limit)
-    local valueLength, unitLength = textLength(value), textLength(unit)
-    if valueLength * 8 + unitLength * 5 <= limit then
-        lcd.drawText(x, y, value, MIDSIZE)
-        if unit ~= "" then
-            lcd.drawText(x + valueLength * 8 + 1, y + 5, unit, SMLSIZE)
+local function drawBigValue(x, y, i, limit)
+    local valueLength = vLen[i]
+    if valueLength * 8 + uLen[i] * 5 <= limit then
+        lcd.drawText(x, y, valText[i], MIDSIZE)
+        if pUnit[i] ~= "" then
+            lcd.drawText(x + valueLength * 8 + 1, y + 5, pUnit[i], SMLSIZE)
         end
     else
-        lcd.drawText(x, y, both, pickFont(both, limit, FONTS_BIG))
+        lcd.drawText(x, y, bothText[i], pickFont(bLen[i], limit, FONTS_BIG))
     end
 end
 
@@ -1427,68 +507,51 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi)
         px, py = x, y
     end
 end
-
 local function drawLeftColumn()
-    local n = 0
-    for i = 1, 6 do
-        if sOn[i] == 1 and
-            textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE) ~= "" and trim(sSrc[i]) ~= "" then
-            n = n + 1
-            leftActive[n] = i
-        end
-    end
+    local n = leftN
     if n ~= 1 then sparkCount, sparkHead, sparkSlot = 0, 0, 0 end
     if n == 0 then return end
-    local function text(k)
-        local i = leftActive[k]
-        return textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE),
-            string.format(slotFormats[i], slotValues[i]) .. trim(sUnit[i]),
-            string.format(slotFormats[i], slotValues[i]), trim(sUnit[i])
-    end
     if n >= 4 then
-        local step = (n == 6) and 11 or math.floor(55 / (n - 1))
         for k = 1, n do
-            local name, value = text(k)
-            lcd.drawText(1, 2 + (k - 1) * step, name .. ":" .. value, SMLSIZE)
+            lcd.drawText(1, 2 + (k - 1) * leftStep, lineText[leftActive[k]], SMLSIZE)
         end
     elseif n == 3 then
         -- 3 Sensoren: Name und Wert gleich gross (normale Schrift), sonst SMLSIZE
         for k = 1, 3 do
-            local name, value = text(k)
+            local i = leftActive[k]
             local y = 1 + (k - 1) * 21
             local limit = (k == 1) and 33 or 43
             -- eine gemeinsame Schrift pro Block (nach dem breiteren Text)
-            local font = pickFont((textLength(value) > textLength(name) + 1) and
-                value or (name .. ":"), limit, FONTS_NORMAL)
-            lcd.drawText(1, y, name .. ":", font)
-            lcd.drawText(1, y + 9, value, font)
+            local font = pickFont((bLen[i] > nameLen[i] + 1) and bLen[i] or (nameLen[i] + 1),
+                limit, FONTS_NORMAL)
+            lcd.drawText(1, y, pLabel[i], font)
+            lcd.drawText(1, y + 9, bothText[i], font)
         end
     elseif n == 2 then
         -- 2 Sensoren: Name und Wert ganz gross (MIDSIZE), erster Name im GPS-Bereich begrenzt
         for k = 1, 2 do
-            local name, both, value, unit = text(k)
+            local i = leftActive[k]
             local y = 2 + (k - 1) * 32
-            drawName(1, y, name, (k == 1) and 33 or 43)
-            drawBigValue(1, y + 14, both, value, unit, 43)
+            drawName(1, y, i, (k == 1) and 33 or 43)
+            drawBigValue(1, y + 14, i, 43)
         end
         lcd.drawLine(0, 31, 40, 31, SOLID, FORCE)
     else
         local slot = leftActive[1]
-        local name, both, value, unit = text(1)
-        drawName(1, 1, name, 33)
-        drawBigValue(1, 15, both, value, unit, 43)
+        drawName(1, 1, slot, 33)
+        drawBigValue(1, 15, slot, 43)
         if graphEnabled ~= 1 then
             sparkCount, sparkHead, sparkSlot = 0, 0, 0
             local low = sessionMin[slot] or slotValues[slot]
             local high = sessionMax[slot] or slotValues[slot]
-            lcd.drawText(1, 36, "Max:" .. string.format("%." .. sPrecision[slot] .. "f", high), SMLSIZE)
-            lcd.drawText(1, 51, "Min:" .. string.format("%." .. sPrecision[slot] .. "f", low), SMLSIZE)
+            lcd.drawText(1, 36, string.format(fmtMax[slot], high), SMLSIZE)
+            lcd.drawText(1, 51, string.format(fmtMin[slot], low), SMLSIZE)
             return
         end
-        local interval = math.floor(graphSeconds * 100 / SPARK_N)
-        if sparkSlot ~= slot or sparkSrc ~= sSrc[slot] or sparkInterval ~= interval then
+        local interval = graphInterval
+        if sparkSlot ~= slot or sparkSrc ~= pSrc[slot] or sparkInterval ~= interval then
             sparkCount, sparkHead, sparkLast, sparkSlot, sparkSrc, sparkInterval =
-                0, 0, 0, slot, sSrc[slot], interval
+                0, 0, 0, slot, pSrc[slot], interval
         end
         local now = getTime()
         if sparkCount == 0 or now - sparkLast >= interval then
@@ -1509,56 +572,65 @@ local function drawLeftColumn()
         end
         drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
         if graphLow ~= nil then
-            lcd.drawText(1, 34, string.format("%." .. sPrecision[slot] .. "f", graphHigh), SMLSIZE)
-            lcd.drawText(1, 54, string.format("%." .. sPrecision[slot] .. "f", graphLow), SMLSIZE)
+            lcd.drawText(1, 34, string.format(valFmt[slot], graphHigh), SMLSIZE)
+            lcd.drawText(1, 54, string.format(valFmt[slot], graphLow), SMLSIZE)
         end
     end
 end
 
 local function run(event)
     lcd.clear()
-    if not configLoaded then loadConfig() end
-    if event == EVT_MENU_LONG then
-        if menuActive and axisEditing then saveConfig() end
-        menuActive, menuPage, selectedRow, editField = true, 1, 1, 0
-        selectedColumn = 1
-        axisEditing = false
-        menuOpenTime = getTime()
-    end
-    if menuActive then
-        if calibrationStep > 0 then
-            if event == EVT_EXIT_BREAK then
-                calibrationStep = 0
-                calibrationLevel = nil
-                calibrationMessage = "Calib. aborted"
-            else
-                calibrate(event)
-            end
-        else
-            handleMenu(event)
-        end
-        drawMenu(event)
+    if not ready then startup() end
+    if not ready then
+        lcd.drawText(1, 1, "horz_cfg.lua?", SMLSIZE + INVERS)
         return 0
+    end
+    if event == EVT_MENU_LONG and not menu then
+        local chunk = loadScript(DIR .. "horz_menu")
+        if chunk then
+            menu = chunk()
+        else
+            menuFailUntil = getTime() + 200
+        end
+    end
+    if menu then
+        local status = menu.run(event, cfg)
+        if status == "save" then
+            dirty = true
+        elseif status == "exit" then
+            menu, dirty = nil, true
+            collectgarbage()
+        end
+        if status ~= "exit" then return 0 end
+    end
+    if dirty then
+        dirty = not reprepare()
+        collectgarbage()
     end
 
     for i = 1, SLOT_COUNT do
-        slotValues[i] = readSlot(trim(sSrc[i]), sUnit[i])
-        slotFormats[i] = "%." .. sPrecision[i] .. "f"
-        local source = trim(sSrc[i])
-        if sessionSource[i] ~= source then
-            sessionSource[i], sessionMin[i], sessionMax[i] = source, nil, nil
+        local value = 0
+        if pSrc[i] ~= "" then value = readSlot(pSrc[i]) end
+        slotValues[i] = value
+        if track[i] then
+            sessionMin[i] = math.min(sessionMin[i] or value, value)
+            sessionMax[i] = math.max(sessionMax[i] or value, value)
         end
-        if (i >= CUSTOM_SLOT_FIRST or sOn[i] == 1) and source ~= "" then
-            sessionMin[i] = math.min(sessionMin[i] or slotValues[i], slotValues[i])
-            sessionMax[i] = math.max(sessionMax[i] or slotValues[i], slotValues[i])
-        else
-            sessionMin[i], sessionMax[i] = nil, nil
+        if value ~= lastVal[i] then
+            lastVal[i] = value
+            if i <= STANDARD_SLOT_COUNT then
+                valText[i] = string.format(valFmt[i], value)
+                bothText[i] = string.format(fmtBoth[i], value)
+                lineText[i] = string.format(fmtLine[i], value)
+                vLen[i], bLen[i] = charLen(valText[i]), charLen(bothText[i])
+            end
         end
     end
-    if trim(altimeterSource) ~= "" then
-        local altitudeValue = readSlot(trim(altimeterSource), "")
-        if isFinite(altitudeValue) then
-            filteredAlt = altitudeValue * 0.25 + filteredAlt * 0.75
+    local alt = 0
+    if altSrc ~= "" then
+        alt = readSlot(altSrc)
+        if isFinite(alt) then
+            filteredAlt = alt * 0.25 + filteredAlt * 0.75
         end
     end
     local pitch, roll = getAttitude()
@@ -1617,8 +689,7 @@ local function run(event)
     if viewMode == 0 then
         lcd.drawLine(cx - dx, cy - dy + pitchOffset, cx + dx, cy + dy + pitchOffset, SOLID, FORCE)
     end
-    if trim(altimeterSource) ~= "" then
-        local alt = readSlot(trim(altimeterSource), "")
+    if altSrc ~= "" then
         -- Eine halbe Boxhoehe entspricht 5 m; kleine Striche liegen bei 2,5-m-Schritten.
         local metersPerPixel = ALTITUDE_METERS_PER_HALFBOX / sizeH
         local halfStep = math.floor(alt / ALTITUDE_TICK_METERS)
@@ -1646,12 +717,13 @@ local function run(event)
         lcd.drawText(satsX + 1, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
     end
     if insideEnabled == 1 then
-        local entry = catalogEntry(insideSource)
-        local insideUnit = entry and entry[4] or ""
-        local insideValue, insideFormat = readSlot(trim(insideSource), insideUnit)
-        if string.lower(trim(insideSource)) == "alt" then insideValue = filteredAlt end
-        local insideName = entry and entry[1] or trim(insideSource)
-        lcd.drawText(cx, cy - 13, string.format(insideFormat, insideValue) .. insideUnit, SMLSIZE + CENTER)
+        local insideValue = 0
+        if insideIsAlt then
+            insideValue = filteredAlt
+        elseif insideSrc ~= "" then
+            insideValue = readSlot(insideSrc)
+        end
+        lcd.drawText(cx, cy - 13, string.format(insideFmt, insideValue), SMLSIZE + CENTER)
     end
 
     local yBottom = cy - sizeH - 1
@@ -1675,23 +747,31 @@ local function run(event)
 
     drawLeftColumn()
     for i = 7, 9 do
-        local name, unit = textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE), trim(sUnit[i])
-        if sOn[i] == 1 and name ~= "" then
-            local value = string.format(slotFormats[i], slotValues[i])
-            do
-                local row = i - 7
-                lcd.drawText(127, 1 + row * 17, name .. ":", SMLSIZE + RIGHT)
-                lcd.drawText(127, 9 + row * 17, value .. unit, SMLSIZE + RIGHT)
-            end
+        if pShow[i] then
+            local row = i - 7
+            lcd.drawText(127, 1 + row * 17, pLabel[i], SMLSIZE + RIGHT)
+            lcd.drawText(127, 9 + row * 17, bothText[i], SMLSIZE + RIGHT)
         end
     end
-    lcd.drawText(127, 51, string.format("%.0f", pitch) .. "P°", SMLSIZE + RIGHT)
-    lcd.drawText(127, 58, string.format("%.0f", roll) .. "R°", SMLSIZE + RIGHT)
+    lcd.drawText(127, 51, string.format("%.0fP°", pitch), SMLSIZE + RIGHT)
+    lcd.drawText(127, 58, string.format("%.0fR°", roll), SMLSIZE + RIGHT)
     if satelliteVisible then drawSatellite(satelliteX, satelliteY, fix) end
-    if configSaveFailed then
+    if cfg.configSaveFailed then
         lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
-    elseif configLoadWarning then
+    elseif cfg.configLoadWarning then
         lcd.drawText(52, 0, "OLD CFG", SMLSIZE + INVERS)
+    end
+    if menuFailUntil > 0 then
+        if getTime() < menuFailUntil then
+            lcd.drawText(1, 58, "horz_menu.lua?", SMLSIZE + INVERS)
+        else
+            menuFailUntil = 0
+        end
+    end
+    if DEBUG_MEM then
+        local used = collectgarbage("count")
+        if used > memPeak then memPeak = used end
+        lcd.drawText(1, 0, string.format("%d/%d/%dK", used, memPeak, memInit), SMLSIZE + INVERS)
     end
     return 0
 end
