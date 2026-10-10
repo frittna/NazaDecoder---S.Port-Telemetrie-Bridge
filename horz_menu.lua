@@ -411,8 +411,8 @@ local function handleMenu(event)
                 cfg.attitudeMode = (cfg.attitudeMode == 1) and 2 or 1
                 save()
             elseif selectedRow == 4 then
-                cfg.viewMode = 1 - cfg.viewMode
-                save()
+                --cfg.viewMode = 1 - cfg.viewMode    //option war nun  doppelt, freie zeile könnte noch genutzt werden
+                --save()
             elseif selectedRow <= 3 then
                 if axisEditing then
                     local axis = (selectedRow == 1 and cfg.fwdAxis) or (selectedRow == 2 and cfg.sideAxis) or cfg.downAxis
@@ -677,7 +677,7 @@ local function drawMenu(event)
         local rows = axisRows
         rows[1], rows[2], rows[3] = "Forward: " .. cfg.fwdAxis, "Side: " .. cfg.sideAxis,
             "Down: " .. cfg.downAxis
-        rows[4] = "BOX: " .. ((cfg.viewMode == 1) and "FULL" or "SIMPLE")
+        --rows[4] = "BOX: " .. ((cfg.viewMode == 1) and "FULL" or "SIMPLE")  //option war doppelt, freie zeile könnte noch genutzt werden
         rows[5] = "Attitude: " .. ((cfg.attitudeMode == 1) and "ANGLES" or "VECTOR")
         for i = 1, #rows do
             local y = 10 + (i - 1) * 8
