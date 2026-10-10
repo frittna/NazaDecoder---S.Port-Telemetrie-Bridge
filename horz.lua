@@ -1,4 +1,4 @@
----graph scaling atm hat minimal bug, fixing it...soon
+---graph scaling atm has minimal bug when mo MinMax is set, which should be no probl but graph is getting small, fixing it...soon
 
 -- ======================================================================================================================
 -- LUA: Horizon & Telemetry Sensor Display for FrSky Sensors (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna Oct 10, 2026 
