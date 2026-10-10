@@ -513,11 +513,11 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi)
         end
     end
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
-    lcd.drawLine(x0, y0, x1, y0, (windowHigh > hi) and DOTTED or SOLID, FORCE)
-    lcd.drawLine(x0, y1, x1, y1, (windowLow < lo) and DOTTED or SOLID, FORCE)
+    local plotTop, plotBottom = y0 + 6, y1 - 7
+    lcd.drawLine(x0, plotTop, x1, plotTop, (windowHigh > hi) and DOTTED or SOLID, FORCE)
+    lcd.drawLine(x0, plotBottom, x1, plotBottom, (windowLow < lo) and DOTTED or SOLID, FORCE)
     if sparkCount < 2 then return windowLow, windowHigh end
-    local span, plotTop, plotBottom = hi - lo, y0 + 6, y1 - 7
-    local h = plotBottom - plotTop
+    local span, h = hi - lo, plotBottom - plotTop
     local px, py
     for k = 0, sparkCount - 1 do
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
@@ -593,8 +593,11 @@ local function drawLeftColumn()
             if graphHigh <= graphLow then graphHigh = graphLow + 1 end
         end
         local windowLow, windowHigh = drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
-        lcd.drawText(1, 34, string.format(valFmt[slot], windowHigh), SMLSIZE)
-        lcd.drawText(1, 54, string.format(valFmt[slot], windowLow), SMLSIZE)
+        local labelHigh, labelLow = graphHigh or windowHigh, graphLow or windowLow
+        if windowHigh > labelHigh then labelHigh = windowHigh end
+        if windowLow < labelLow then labelLow = windowLow end
+        lcd.drawText(1, 34, string.format(valFmt[slot], labelHigh), SMLSIZE)
+        lcd.drawText(1, 54, string.format(valFmt[slot], labelLow), SMLSIZE)
     end
 end
 
