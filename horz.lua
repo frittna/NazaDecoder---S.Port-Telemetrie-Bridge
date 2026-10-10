@@ -31,7 +31,7 @@ local axisEditing = false
 local configLoaded = false
 local MENU_OPEN_DEBOUNCE = 50 -- getTime zaehlt in 10-ms-Ticks.
 -- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
-local CONFIG_READ_LIMIT = 1024
+local CONFIG_READ_LIMIT = 2048
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
@@ -48,6 +48,7 @@ local atan2 = math.atan2 or function(y, x)
     return 0
 end
 
+local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
 local defaults = {
     names = { "RX", "Alt", "VSp", "Spd", "Dist", "Head", "Batt", "celD", "Amp" },
     sources = { "RSSI", "GAlt", "VSpd", "GSpd", "Dist", "Hdg", "Cels", "celD", "Curr" },
@@ -156,11 +157,18 @@ local function setDefaults()
     graphSeconds = 30
     graphEnabled = 1
     fwdAxis, sideAxis, downAxis = "X+", "Z-", "Y+"
-    for i = 1, 9 do
-        sName[i], sSrc[i], sUnit[i] = defaults.names[i], defaults.sources[i], defaults.units[i]
-        sOn[i] = 1
-        local entry = catalogByName[string.lower(defaults.sources[i])]
-        sPrecision[i] = entry and tonumber(string.match(entry[2], "%.(%d)f")) or 0
+    for i = 1, SLOT_COUNT do
+        if i <= STANDARD_SLOT_COUNT then
+            sName[i], sSrc[i], sUnit[i] =
+                defaults.names[i], defaults.sources[i], defaults.units[i]
+            sOn[i] = 1
+        else
+            sName[i], sSrc[i], sUnit[i] = "C" .. (i - STANDARD_SLOT_COUNT), "", ""
+            sOn[i] = 0
+        end
+        local entry = catalogByName[string.lower(sSrc[i])]
+        sPrecision[i] = (i > STANDARD_SLOT_COUNT) and 0 or
+            (entry and tonumber(string.match(entry[2], "%.(%d)f")) or 0)
         sMin[i], sMax[i] = 0, 0
     end
 end
@@ -251,8 +259,9 @@ local function loadConfig()
                     elseif key == "ALTIMETER-SCALE" and validText(value, 4) then
                         altimeterSource = value
                     elseif key == "SLOTON" then
-                        if string.match(value, "^[01]+$") and #value == 9 then
-                            for i = 1, 9 do sOn[i] = tonumber(string.sub(value, i, i)) end
+                        if string.match(value, "^[01]+$") and
+                            (#value == STANDARD_SLOT_COUNT or #value == SLOT_COUNT) then
+                            for i = 1, #value do sOn[i] = tonumber(string.sub(value, i, i)) end
                         end
                     elseif key == "GRAPHTIME" then
                         local secs = tonumber(value)
@@ -264,14 +273,14 @@ local function loadConfig()
                     elseif key == "SLOTPRECI" then
                         local iText, precision = string.match(value, "^(%d+)|(%d)$")
                         local i, number = tonumber(iText), tonumber(precision)
-                        if i and i % 1 == 0 and i >= 1 and i <= 9 and number and number <= 4 then
+                        if i and i % 1 == 0 and i >= 1 and i <= SLOT_COUNT and number and number <= 4 then
                             sPrecision[i] = number
                         end
                     elseif key == "SLOTRANGE" then
                         local iText, minText, maxText =
                             string.match(value, "^(%d+)|([^|]*)|([^|]*)$")
                         local i, minValue, maxValue = tonumber(iText), tonumber(minText), tonumber(maxText)
-                        if i and i % 1 == 0 and i >= 1 and i <= 9 and
+                        if i and i % 1 == 0 and i >= 1 and i <= SLOT_COUNT and
                             isFinite(minValue) and isFinite(maxValue) and
                             math.abs(minValue) <= MM_LIMIT and math.abs(maxValue) <= MM_LIMIT then
                             sMin[i], sMax[i] = minValue, maxValue
@@ -289,7 +298,7 @@ local function loadConfig()
                             string.match(value, "^(%d+)|([^|]*)|([^|]*)|([^|]*)$")
                         local i = tonumber(iText)
                         if iText and name and source and unit and i and i % 1 == 0 and
-                            i >= 1 and i <= 9 and validText(name, SLOT_NAME_LEGACY_MAX) and
+                            i >= 1 and i <= SLOT_COUNT and validText(name, SLOT_NAME_LEGACY_MAX) and
                             validText(source, 4) and validText(unit, 3) then
                             sName[i], sSrc[i], sUnit[i] =
                                 textSlice(name, 1, SLOT_NAME_MAX), source, unit
@@ -306,7 +315,7 @@ local function saveConfig()
     -- Leerzeichen am Rand werden beim Beenden der Eingabe entfernt
     pitchSource, rollSource, altimeterSource =
         trim(pitchSource), trim(rollSource), trim(altimeterSource)
-    for i = 1, 9 do
+    for i = 1, SLOT_COUNT do
         sName[i], sSrc[i], sUnit[i] =
             textSlice(trim(sName[i]), 1, SLOT_NAME_MAX), trim(sSrc[i]), trim(sUnit[i])
     end
@@ -324,12 +333,12 @@ local function saveConfig()
     io.write(f, "INSIDE=" .. insideSource .. "," .. insideEnabled .. "\n")
     io.write(f, "ALTIMETER-SCALE=" .. trim(altimeterSource) .. "\n")
     local on = ""
-    for i = 1, 9 do on = on .. sOn[i] end
+    for i = 1, SLOT_COUNT do on = on .. sOn[i] end
     io.write(f, "SLOTON=" .. on .. "\n")
     io.write(f, "GRAPHTIME=" .. graphSeconds .. "\n")
     io.write(f, "GRAPH=" .. graphEnabled .. "\n")
     io.write(f, "AXES=" .. fwdAxis .. "," .. sideAxis .. "," .. downAxis .. "\n")
-    for i = 1, 9 do
+    for i = 1, SLOT_COUNT do
         io.write(f, "SLOT=" .. i .. "|" .. trim(sName[i]) .. "|" ..
             trim(sSrc[i]) .. "|" .. trim(sUnit[i]) .. "\n")
         io.write(f, "SLOTPRECI=" .. i .. "|" .. sPrecision[i] .. "\n")
@@ -363,13 +372,26 @@ local function changeChar(text, index, delta)
 end
 
 local function slotIndex()
-    return (menuPage == 2) and selectedRow or (selectedRow + 6)
+    if menuPage == 2 then return selectedRow end
+    if menuPage == 3 then return selectedRow + 6 end
+    return selectedRow + 9
 end
 
-local function sensorColumnCount()
-    if menuPage == 1 and selectedRow >= 7 then return 2 end
-    if menuPage == 2 or (menuPage == 3 and selectedRow <= 3) then return 6 end
-    if menuPage == 3 and (selectedRow == 4 or selectedRow == 5) then return 2 end
+local function isSensorPage()
+    return menuPage == 2 or menuPage == 3 or menuPage == 4
+end
+
+local function sensorSlotRows()
+    if menuPage == 3 then return 3 end
+    return 6
+end
+
+local function sensorColumnCount(row, page)
+    row, page = row or selectedRow, page or menuPage
+    if page == 1 and row >= 7 then return 2 end
+    if (page == 2 or page == 4) and row <= 6 then return 6 end
+    if page == 3 and row <= 3 then return 6 end
+    if page == 3 and (row == 4 or row == 5) then return 2 end
     return 1
 end
 
@@ -377,6 +399,7 @@ local function menuContentRows()
     if menuPage == 1 then return 8 end
     if menuPage == 2 then return 6 end
     if menuPage == 3 then return 6 end
+    if menuPage == 4 then return 6 end
     return 6
 end
 
@@ -384,10 +407,32 @@ local function menuRows()
     return menuContentRows() + ((menuPage == 1) and 0 or 1)
 end
 
+local function moveHorizontal(delta)
+    local row = selectedRow
+    local column = selectedColumn + delta
+    local columnCount = sensorColumnCount()
+    if column < 1 then
+        row = math.max(1, row - 1)
+        column = sensorColumnCount(row)
+    elseif column > columnCount then
+        row = math.min(menuRows(), row + 1)
+        column = 1
+    end
+    if row ~= selectedRow then
+        selectedRow, selectedColumn = row, column
+    else
+        selectedColumn = math.max(1, math.min(sensorColumnCount(), column))
+    end
+end
+
 local function nextMenuPage()
     if axisEditing then saveConfig() end
     if menuPage == 2 then
         menuPage, selectedRow = 3, 1
+    elseif menuPage == 3 then
+        menuPage, selectedRow = 4, 1
+    elseif menuPage == 4 then
+        menuPage, selectedRow = 1, 1
     else
         menuPage, selectedRow = 1, 1
     end
@@ -463,12 +508,11 @@ local function handleMenu(event)
         end
         return true
     end
-    local sensorRow = (menuPage == 2 or menuPage == 3) and
-        selectedRow <= menuContentRows()
+    local sensorRow = isSensorPage() and selectedRow <= menuContentRows()
     local configLinks = menuPage == 1 and selectedRow >= 7 and selectedRow <= 8
     if editField == 0 and (sensorRow or configLinks) and (horizontalLeft or horizontalRight) then
         local delta = horizontalRight and 1 or -1
-        selectedColumn = math.max(1, math.min(sensorColumnCount(), selectedColumn + delta))
+        moveHorizontal(delta)
         return true
     end
     if editField > 0 then
@@ -514,7 +558,7 @@ local function handleMenu(event)
             end
             return true
         end
-        if menuPage == 2 or (menuPage == 3 and selectedRow <= 3) then
+        if (menuPage == 2 or menuPage == 4) or (menuPage == 3 and selectedRow <= 3) then
             local slot = slotIndex()
             if editField == 1 then
                 if negative or positive then
@@ -552,7 +596,7 @@ local function handleMenu(event)
         return true
     end
 
-    if menuPage == 4 and axisEditing and selectedRow <= 3 and (negative or positive) then
+    if menuPage == 5 and axisEditing and selectedRow <= 3 and (negative or positive) then
         if cycleAxis(selectedRow, positive and 1 or -1) then
             axisMessage = "Axes changed"
         else
@@ -561,11 +605,8 @@ local function handleMenu(event)
     elseif negative or positive then
         local delta = positive and 1 or -1
         selectedRow = math.max(1, math.min(menuRows(), selectedRow + delta))
-        if menuPage == 2 or menuPage == 3 then
-            selectedColumn = math.min(selectedColumn, sensorColumnCount())
-        elseif menuPage == 1 then
-            selectedColumn = (selectedRow >= 7 and selectedRow <= 8) and
-                math.min(selectedColumn, 2) or 1
+        if isSensorPage() or menuPage == 1 then
+            selectedColumn = 1
         end
     elseif event == EVT_PAGE_BREAK then
         if menuPage ~= 1 then nextMenuPage() end
@@ -601,7 +642,7 @@ local function handleMenu(event)
                 if selectedColumn == 1 then
                     menuPage, selectedRow = 2, 1
                 else
-                    menuPage, selectedRow = 4, 1
+                    menuPage, selectedRow = 5, 1
                 end
                 selectedColumn = 1
             elseif selectedRow == 8 then
@@ -612,8 +653,8 @@ local function handleMenu(event)
                 end
                 saveConfig()
             end
-        elseif menuPage == 2 or menuPage == 3 then
-            if menuPage == 2 or selectedRow <= 3 then
+        elseif isSensorPage() then
+            if selectedRow <= sensorSlotRows() then
                 if selectedColumn == 1 then
                     editField, editCharIdx = 1, 1
                 elseif selectedColumn == 2 or selectedColumn == 3 then
@@ -628,23 +669,23 @@ local function handleMenu(event)
                     sOn[slot] = 1 - sOn[slot]
                     saveConfig()
                 end
-            elseif selectedRow == 4 then
+            elseif menuPage == 3 and selectedRow == 4 then
                 if selectedColumn == 1 then editField = 4
                 else
                     insideEnabled = 1 - insideEnabled
                     saveConfig()
                 end
-            elseif selectedRow == 5 then
+            elseif menuPage == 3 and selectedRow == 5 then
                 if selectedColumn == 1 then
                     graphEnabled = 1 - graphEnabled
                     saveConfig()
                 else
                     editField = 6
                 end
-            elseif selectedRow == 6 then
+            elseif menuPage == 3 and selectedRow == 6 then
                 editField = 5
             end
-        elseif menuPage == 4 then
+        elseif menuPage == 5 then
             if selectedRow == 5 then
                 attitudeMode = (attitudeMode == 1) and 2 or 1
                 saveConfig()
@@ -758,8 +799,9 @@ end
 
 local function drawMenu(event)
     local titles = {
-        "--CONFIG PAGE--", "--SENSOR SELECT--",
-        "--SENSOR SRC-NAMES--", "--AXIS SETTING--"
+        "--CONFIG PAGE--", "--Sensors Left 1/3--",
+        "--Sensors Right 2/3--", "--Custom Sensors 3/3--",
+        "--AXIS SETTING--"
     }
     if mmEditSlot then
         lcd.drawText(1, 1, "-- SENSOR MIN/MAX --", INVERS + SMLSIZE)
@@ -815,8 +857,15 @@ local function drawMenu(event)
             ((attitudeMode == 1) and "ANGLES" or "VECTOR"), attitudeFlags + SMLSIZE)
         lcd.drawText(78, line(6), "VIEW:" ..
             ((viewMode == 1) and "3D" or "Classic"), viewFlags + SMLSIZE)
-    elseif menuPage == 2 or menuPage == 3 then
-        local first, last = menuPage == 2 and 1 or 7, menuPage == 2 and 6 or 9
+    elseif isSensorPage() then
+        local first, last
+        if menuPage == 2 then
+            first, last = 1, 6
+        elseif menuPage == 3 then
+            first, last = 7, 9
+        else
+            first, last = 10, 15
+        end
         local headerY = 8
         lcd.drawText(4, headerY, "Name", INVERS + SMLSIZE)
         lcd.drawText(27, headerY, "Sorce", INVERS + SMLSIZE)
@@ -825,7 +874,8 @@ local function drawMenu(event)
         lcd.drawText(94, headerY, "MM", INVERS + SMLSIZE)
         lcd.drawText(108, headerY, "ON", INVERS + SMLSIZE)
         for i = first, last do
-            local row = (menuPage == 2) and i or (i - 6)
+            local row = (menuPage == 2) and i or
+                ((menuPage == 3) and (i - 6) or (i - 9))
             local y = 15 + (row - 1) * 7
             local selected = row == selectedRow
             local editing = selected and editField > 0
@@ -1258,8 +1308,9 @@ end
 
 local function drawLeftColumn()
     local n = 0
-    for i = 1, 6 do
-        if sOn[i] == 1 and textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE) ~= "" then
+    for i = 1, SLOT_COUNT do
+        if (i <= 6 or i >= 10) and sOn[i] == 1 and
+            textSlice(trim(sName[i]), 1, SLOT_NAME_VISIBLE) ~= "" and trim(sSrc[i]) ~= "" then
             n = n + 1
             leftActive[n] = i
         end
@@ -1368,7 +1419,7 @@ local function run(event)
         return 0
     end
 
-    for i = 1, 9 do
+    for i = 1, SLOT_COUNT do
         slotValues[i] = readSlot(trim(sSrc[i]), sUnit[i])
         slotFormats[i] = "%." .. sPrecision[i] .. "f"
         local source = trim(sSrc[i])
