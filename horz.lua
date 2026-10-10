@@ -545,11 +545,13 @@ local function sparkWindowExtremes(start)
     local windowLow, windowHigh
     for k = 0, sparkCount - 1 do
         local value = sparkSample(start, k)
-        if windowLow == nil then
-            windowLow, windowHigh = value, value
-        else
-            if value < windowLow then windowLow = value end
-            if value > windowHigh then windowHigh = value end
+        if type(value) == "number" then
+            if windowLow == nil then
+                windowLow, windowHigh = value, value
+            else
+                if value < windowLow then windowLow = value end
+                if value > windowHigh then windowHigh = value end
+            end
         end
     end
     return windowLow, windowHigh
@@ -574,6 +576,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
     local lo, hi, fixedLow, fixedHigh = sparkScale(slot)
     local windowLow, windowHigh = sparkWindowExtremes(start)
+    if windowLow == nil or windowHigh == nil then return end
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
     local maxLabelChars = sparkMaxLabelChars(x0, x1)
     -- Unconfigured labels follow the session-derived scale edge used by the trace.
@@ -601,19 +604,24 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     if sparkCount < 2 then return end
     local span, h = hi - lo, y1 - y0
     local px, py
+    -- Fixed spacing reaches x1 at sample SPARK_N; partial buffers grow from the left.
+    local xStep = (x1 - plotX0) / (SPARK_N - 1)
     local previousOutside = false
     for k = 0, sparkCount - 1 do
         local v = sparkSample(start, k)
-        local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
-        local y = math.floor(y1 - ratio * h + 0.5)
-        local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
-        -- Layout reserves SPARK_MIN_PLOT_WIDTH; fixed spacing reaches x1 only when the buffer is full.
-        local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
-        if px then
-            lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
+        if type(v) == "number" then
+            local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
+            local y = math.floor(y1 - ratio * h + 0.5)
+            local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
+            local x = math.floor(plotX0 + k * xStep + 0.5)
+            if px then
+                lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
+            end
+            px, py = x, y
+            previousOutside = outside
+        else
+            px, py, previousOutside = nil, nil, false
         end
-        px, py = x, y
-        previousOutside = outside
     end
 end
 local function drawLeftColumn()
