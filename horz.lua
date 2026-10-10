@@ -796,7 +796,7 @@ local function run(event)
             satelliteVisible = true
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX + 7, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE + RIGHT)
+        lcd.drawText(satsX + 2 , cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE + CENTER)
     end
     if insideEnabled == 1 then
         local insideValue = 0
