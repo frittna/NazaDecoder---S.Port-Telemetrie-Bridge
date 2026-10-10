@@ -521,9 +521,10 @@ local function sparkScale(slot)
 end
 
 local function sparkLabel(value, slot, maxChars)
-    local text = string.format(valFmt[slot], value)
+    local precision = cfg.sPrecision[slot] or 0
+    local text = string.format("%." .. precision .. "f", value)
     if charLen(text) <= maxChars then return text end
-    for decimals = (cfg.sPrecision[slot] or 0) - 1, 0, -1 do
+    for decimals = precision - 1, 0, -1 do
         text = string.format("%." .. decimals .. "f", value)
         if charLen(text) <= maxChars then return text end
     end
@@ -569,7 +570,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     for k = 0, sparkCount - 1 do
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
-        local y = y1 - 1 - ratio * h
+        local y = math.floor(y1 - 1 - ratio * h + 0.5)
         local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
         if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
         px, py = x, y
