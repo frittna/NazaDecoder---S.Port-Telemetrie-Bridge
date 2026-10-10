@@ -774,7 +774,7 @@ local function run(event)
     local now = getTime()
     local warningActive = updateGPSWarning(fix, now)
     local satelliteVisible = false
-    local satelliteX, satelliteY = cx - sizeW - 14, cy - sizeH - 5
+    local satelliteX, satelliteY = cx - sizeW - 14, cy - sizeH - 7
     if fix > 0 then
         local blinkOn = (now % 80) < 60
         local satsX = cx - sizeW - 7
@@ -782,7 +782,7 @@ local function run(event)
             satelliteVisible = true
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX + 2, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX + 7, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE + RIGHT)
     end
     if insideEnabled == 1 then
         local insideValue = 0
