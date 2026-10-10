@@ -501,9 +501,11 @@ local function drawBigValue(x, y, i, limit)
     end
 end
 
-local function drawSparkline(x0, y0, x1, y1, lo, hi, fixedLow, fixedHigh, valueFormat)
+local function drawSparkline(x0, y0, x1, y1, lo, hi, slot)
     if sparkCount == 0 then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
+    local fixedLow = (sMin[slot] ~= 0) and sMin[slot] or nil
+    local fixedHigh = (sMax[slot] ~= 0) and sMax[slot] or nil
     local windowLow, windowHigh
     for k = 0, sparkCount - 1 do
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
@@ -515,14 +517,16 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi, fixedLow, fixedHigh, valueF
         end
     end
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
-    local highText = string.format(valueFormat, fixedHigh or windowHigh)
-    local lowText = string.format(valueFormat, fixedLow or windowLow)
+    local highText = string.format(valFmt[slot], fixedHigh or windowHigh)
+    local lowText = string.format(valFmt[slot], fixedLow or windowLow)
     lcd.drawText(1, y0, highText, SMLSIZE)
     lcd.drawText(1, y1 - 6, lowText, SMLSIZE)
     local plotX0 = math.min(x1, math.max(x0,
         1 + math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
-    lcd.drawLine(plotX0, y0, x1, y0, (windowHigh > hi) and DOTTED or SOLID, FORCE)
-    lcd.drawLine(plotX0, y1, x1, y1, (windowLow < lo) and DOTTED or SOLID, FORCE)
+    lcd.drawLine(plotX0, y0, x1, y0,
+        (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID, FORCE)
+    lcd.drawLine(plotX0, y1, x1, y1,
+        (fixedLow and windowLow < fixedLow) and DOTTED or SOLID, FORCE)
     if sparkCount < 2 then return end
     local span, h = hi - lo, y1 - y0 - 1
     local px, py
@@ -598,9 +602,7 @@ local function drawLeftColumn()
             end
             if graphHigh <= graphLow then graphHigh = graphLow + 1 end
         end
-        drawSparkline(1, 34, 43, 60, graphLow, graphHigh,
-            (sMin[slot] ~= 0) and sMin[slot] or nil,
-            (sMax[slot] ~= 0) and sMax[slot] or nil, valFmt[slot])
+        drawSparkline(1, 34, 43, 60, graphLow, graphHigh, slot)
     end
 end
 
