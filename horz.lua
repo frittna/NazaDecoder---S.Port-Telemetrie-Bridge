@@ -29,7 +29,7 @@ local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
 local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
 local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
-local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2
+local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
 local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
@@ -503,7 +503,7 @@ local function drawBigValue(x, y, i, limit)
 end
 
 local function drawSparkline(x0, y0, x1, y1, lo, hi, slot)
-    if sparkCount == 0 then return end
+    if sparkCount == 0 or slot == nil then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
     local fixedLow = (sMin[slot] ~= 0) and sMin[slot] or nil
     local fixedHigh = (sMax[slot] ~= 0) and sMax[slot] or nil
@@ -522,8 +522,8 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi, slot)
     local lowText = string.format(valFmt[slot], fixedLow or windowLow)
     lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
-    local plotX0 = math.min(x1, math.max(x0, SPARK_LABEL_X +
-        math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
+    local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
+    local plotX0 = math.min(x1, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
     lcd.drawLine(plotX0, y0, x1, y0,
         (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID, FORCE)
     lcd.drawLine(plotX0, y1, x1, y1,
