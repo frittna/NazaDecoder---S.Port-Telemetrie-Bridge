@@ -569,10 +569,10 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local currentValue = slotValues[slot]
     -- Only sensors without stored MM limits invert labels when the live reading exceeds the window.
     local noFixedLimits = not fixedLow and not fixedHigh
-    local highLabelStyle = noFixedLimits and currentValue ~= nil and currentValue > windowHigh and
-        (SMLSIZE + INVERS) or SMLSIZE
-    local lowLabelStyle = noFixedLimits and currentValue ~= nil and currentValue < windowLow and
-        (SMLSIZE + INVERS) or SMLSIZE
+    local liveAboveWindow = noFixedLimits and currentValue ~= nil and currentValue > windowHigh
+    local liveBelowWindow = noFixedLimits and currentValue ~= nil and currentValue < windowLow
+    local highLabelStyle = liveAboveWindow and (SMLSIZE + INVERS) or SMLSIZE
+    local lowLabelStyle = liveBelowWindow and (SMLSIZE + INVERS) or SMLSIZE
     lcd.drawText(SPARK_LABEL_X, y0, highText, highLabelStyle)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
