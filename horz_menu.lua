@@ -411,7 +411,7 @@ local function handleMenu(event)
                 cfg.attitudeMode = (cfg.attitudeMode == 1) and 2 or 1
                 save()
             elseif selectedRow == 4 then
-                --cfg.viewMode = 1 - cfg.viewMode    //option war nun  doppelt, freie zeile könnte noch genutzt werden
+                --cfg.viewMode = 1 - cfg.viewMode    //option war doppelt, wird nur als hinweis gebraucht
                 --save()
             elseif selectedRow <= 3 then
                 if axisEditing then
@@ -578,8 +578,8 @@ local function drawMenu(event)
         local viewFlags = (selectedRow == 8 and selectedColumn == 2) and INVERS or 0
         lcd.drawText(8, line(5), "SENSORS", sensorsFlags + SMLSIZE)
         lcd.drawText(78, line(5), "AXES", axesFlags + SMLSIZE)
-        lcd.drawText(8, line(6), "ATTITUDE:" ..
-            ((cfg.attitudeMode == 1) and "ANGLES" or "VECTOR"), attitudeFlags + SMLSIZE)
+        lcd.drawText(8, line(6), "ATTITUDE?:" ..
+            ((cfg.attitudeMode == 1) and "ANGLES" or "VECTORS"), attitudeFlags + SMLSIZE)
         lcd.drawText(78, line(6), "BOX:" ..
             ((cfg.viewMode == 1) and "FULL" or "SIMPLE"), viewFlags + SMLSIZE)
     elseif isSensorPage() then
@@ -677,7 +677,7 @@ local function drawMenu(event)
         local rows = axisRows
         rows[1], rows[2], rows[3] = "Forward: " .. cfg.fwdAxis, "Side: " .. cfg.sideAxis,
             "Down: " .. cfg.downAxis
-        --rows[4] = "BOX: " .. ((cfg.viewMode == 1) and "FULL" or "SIMPLE")  //option war doppelt, freie zeile könnte noch genutzt werden
+        --rows[4] = "BOX: " .. ((cfg.viewMode == 1) and "FULL" or "SIMPLE")   -- die zeile wird nur als hinweis verwendet , war doppelt, keine funktion mehr
         rows[5] = "Attitude: " .. ((cfg.attitudeMode == 1) and "ANGLES" or "VECTOR")
         for i = 1, #rows do
             local y = 10 + (i - 1) * 8
