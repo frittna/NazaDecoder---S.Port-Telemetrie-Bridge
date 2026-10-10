@@ -567,10 +567,11 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
     -- The live reading can advance beyond the buffered window between graph sampling ticks.
     local currentValue = slotValues[slot]
-    -- Invert only automatic edge labels while the live reading is outside the window range.
-    local highLabelStyle = not fixedHigh and currentValue ~= nil and currentValue > hi and
+    -- Only sensors without stored MM limits invert labels when the live reading exceeds the window.
+    local noFixedLimits = not fixedLow and not fixedHigh
+    local highLabelStyle = noFixedLimits and currentValue ~= nil and currentValue > windowHigh and
         (SMLSIZE + INVERS) or SMLSIZE
-    local lowLabelStyle = not fixedLow and currentValue ~= nil and currentValue < lo and
+    local lowLabelStyle = noFixedLimits and currentValue ~= nil and currentValue < windowLow and
         (SMLSIZE + INVERS) or SMLSIZE
     lcd.drawText(SPARK_LABEL_X, y0, highText, highLabelStyle)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
@@ -588,7 +589,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
         local y = math.floor(y1 - ratio * h + 0.5)
         local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
-        -- Keep sample spacing fixed; the trace fills the chart from left to right.
+        -- Fixed spacing keeps the time scale constant; the trace reaches x1 only when full.
         local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
         if px then
             lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
