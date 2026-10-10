@@ -1,3 +1,8 @@
+-- horz_menu.lua: Menu, Calibration and Config-Editor for horz.lua
+-- Loaded by horz.lua via loadScript() only upon a long press of the MENU button and
+-- discarded when exiting. Located in the same folder as horz.lua and horz_cfg.lua.
+-- run(event, cfg) returns nil (menu active), "save" (saved) or "exit" (back).
+-- DEUTSCH:
 -- horz_menu.lua: Menue, Kalibrierung und Config-Editor fuer horz.lua
 -- Wird von horz.lua erst bei langem MENU-Druck per loadScript() geladen und beim
 -- Verlassen wieder verworfen. Liegt im selben Ordner wie horz.lua und horz_cfg.lua.
