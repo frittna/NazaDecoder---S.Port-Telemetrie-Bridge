@@ -552,6 +552,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
     local maxLabelChars = math.max(1, math.floor(
         (x1 - SPARK_LABEL_X - SPARK_LABEL_PAD - SPARK_MIN_PLOT_WIDTH) / SPARK_LABEL_CHAR_WIDTH))
+    -- Unconfigured labels follow the session-derived scale edge used by the trace.
     local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
     lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
@@ -569,7 +570,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
         local y = y1 - 1 - ratio * h
-        local x = plotX0 + k * (x1 - plotX0) / (SPARK_N - 1)
+        local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
         if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
         px, py = x, y
     end
