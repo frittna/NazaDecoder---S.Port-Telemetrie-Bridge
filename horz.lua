@@ -560,10 +560,10 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
     local plotX0 = math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD)
-    lcd.drawLine(plotX0, y0, x1, y0,
-        (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID, FORCE)
-    lcd.drawLine(plotX0, y1, x1, y1,
-        (fixedLow and windowLow < fixedLow) and DOTTED or SOLID, FORCE)
+    local topStyle = (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID
+    local bottomStyle = (fixedLow and windowLow < fixedLow) and DOTTED or SOLID
+    lcd.drawLine(plotX0, y0, x1, y0, topStyle, FORCE)
+    lcd.drawLine(plotX0, y1, x1, y1, bottomStyle, FORCE)
     if sparkCount < 2 then return end
     local span, h = hi - lo, y1 - y0 - 1
     local px, py
