@@ -566,15 +566,17 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
     local highFlags, lowFlags = SMLSIZE, SMLSIZE
-    -- Beide MM-Grenzen gesetzt: Ueberschreitung invertiert links, bisherige Grenze im Graph rechts
+    -- Beide MM-Grenzen gesetzt: wurde eine Grenze in dieser Session verletzt, zeigt das Feld links
+    -- invers den bisherigen Session-Extremwert und der Graph skaliert mit (nur Laufzeit, cfg unberuehrt)
     if fixedLow and fixedHigh then
-        local currentValue = sparkSample(start, sparkCount - 1)
-        if currentValue > fixedHigh then
-            highText, highFlags = sparkLabel(currentValue, slot, maxLabelChars), SMLSIZE + INVERS
-            lcd.drawText(x1, y0, sparkLabel(fixedHigh, slot, maxLabelChars), SMLSIZE + RIGHT)
-        elseif currentValue < fixedLow then
-            lowText, lowFlags = sparkLabel(currentValue, slot, maxLabelChars), SMLSIZE + INVERS
-            lcd.drawText(x1, y1 - SPARK_LABEL_HEIGHT, sparkLabel(fixedLow, slot, maxLabelChars), SMLSIZE + RIGHT)
+        local sessHigh, sessLow = sessionMax[slot], sessionMin[slot]
+        if sessHigh and sessHigh > fixedHigh then
+            hi = sessHigh
+            highText, highFlags = sparkLabel(sessHigh, slot, maxLabelChars), SMLSIZE + INVERS
+        end
+        if sessLow and sessLow < fixedLow then
+            lo = sessLow
+            lowText, lowFlags = sparkLabel(sessLow, slot, maxLabelChars), SMLSIZE + INVERS
         end
     end
     lcd.drawText(SPARK_LABEL_X, y0, highText, highFlags)
