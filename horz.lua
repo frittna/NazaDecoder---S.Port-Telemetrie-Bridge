@@ -30,9 +30,8 @@ local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
 local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
 local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
-local SPARK_LABEL_HEIGHT = 6
+local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
 local SPARK_MIN_PLOT_WIDTH = 4
-local SPARK_LABEL_MAX_CHARS = 5
 local SPARK_LABEL_COMPACT_DIGITS = 6
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
@@ -545,30 +544,14 @@ local function sparkWindowExtremes(start)
     local windowLow, windowHigh
     for k = 0, sparkCount - 1 do
         local value = sparkSample(start, k)
-        if type(value) == "number" then
-            if windowLow == nil then
-                windowLow, windowHigh = value, value
-            else
-                if value < windowLow then windowLow = value end
-                if value > windowHigh then windowHigh = value end
-            end
+        if windowLow == nil then
+            windowLow, windowHigh = value, value
+        else
+            if value < windowLow then windowLow = value end
+            if value > windowHigh then windowHigh = value end
         end
     end
     return windowLow, windowHigh
-end
-
-local function sparkMaxPlotX0(x0, x1)
-    return math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
-end
-
-local function sparkMaxLabelChars(x0, x1)
-    return math.max(1, math.min(SPARK_LABEL_MAX_CHARS, math.floor(
-        (sparkMaxPlotX0(x0, x1) - x0 - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH)))
-end
-
-local function sparkPlotStart(x0, x1, maxLabelChars)
-    return math.min(sparkMaxPlotX0(x0, x1), math.max(x0,
-        x0 + maxLabelChars * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
 end
 
 local function drawSparkline(x0, y0, x1, y1, slot)
@@ -576,52 +559,34 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
     local lo, hi, fixedLow, fixedHigh = sparkScale(slot)
     local windowLow, windowHigh = sparkWindowExtremes(start)
-    if windowLow == nil or windowHigh == nil then return end
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
-    local maxLabelChars = sparkMaxLabelChars(x0, x1)
+    local maxLabelChars = math.max(1, math.floor(
+        (x1 - SPARK_LABEL_X - SPARK_LABEL_PAD - SPARK_MIN_PLOT_WIDTH) / SPARK_LABEL_CHAR_WIDTH))
     -- Unconfigured labels follow the session-derived scale edge used by the trace.
     local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
-    -- The live reading can advance beyond the buffered window between graph sampling ticks.
-    local currentValue = slotValues[slot]
-    -- Only sensors without stored MM limits invert labels when the live reading exceeds the window.
-    -- Compare raw telemetry values, even if rounding makes the displayed label look unchanged.
-    local noFixedLimits = not fixedLow and not fixedHigh
-    local numericCurrent = type(currentValue) == "number"
-    local highLabelStyle, lowLabelStyle = SMLSIZE, SMLSIZE
-    if noFixedLimits and numericCurrent then
-        if currentValue > windowHigh then
-            highLabelStyle = SMLSIZE + INVERS
-        elseif currentValue < windowLow then
-            lowLabelStyle = SMLSIZE + INVERS
-        end
-    end
-    lcd.drawText(x0, y0, highText, highLabelStyle)
-    lcd.drawText(x0, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
-    local plotX0 = sparkPlotStart(x0, x1, maxLabelChars)
-    lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
-    lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
+    lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
+    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
+    local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
+    local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
+    local plotX0 = math.min(maxPlotX0, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
+    --lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
+    --lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
     if sparkCount < 2 then return end
     local span, h = hi - lo, y1 - y0
     local px, py
-    -- Fixed spacing reaches x1 at sample SPARK_N; partial buffers grow from the left.
-    local xStep = (x1 - plotX0) / (SPARK_N - 1)
     local previousOutside = false
     for k = 0, sparkCount - 1 do
         local v = sparkSample(start, k)
-        if type(v) == "number" then
-            local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
-            local y = math.floor(y1 - ratio * h + 0.5)
-            local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
-            local x = math.floor(plotX0 + k * xStep + 0.5)
-            if px then
-                lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
-            end
-            px, py = x, y
-            previousOutside = outside
-        else
-            px, py, previousOutside = nil, nil, false
+        local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
+        local y = math.floor(y1 - ratio * h + 0.5)
+        local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
+        local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
+        if px then
+            lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
         end
+        px, py = x, y
+        previousOutside = outside
     end
 end
 local function drawLeftColumn()
