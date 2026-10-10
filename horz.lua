@@ -30,7 +30,7 @@ local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
 local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
 local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
-local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
+local SPARK_LABEL_HEIGHT = 6
 local SPARK_MIN_PLOT_WIDTH = 4
 local SPARK_LABEL_MAX_CHARS = 5
 local SPARK_LABEL_COMPACT_DIGITS = 6
@@ -561,12 +561,12 @@ end
 
 local function sparkMaxLabelChars(x0, x1)
     return math.max(1, math.min(SPARK_LABEL_MAX_CHARS, math.floor(
-        (sparkMaxPlotX0(x0, x1) - SPARK_LABEL_X - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH)))
+        (sparkMaxPlotX0(x0, x1) - x0 - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH)))
 end
 
 local function sparkPlotStart(x0, x1, maxLabelChars)
     return math.min(sparkMaxPlotX0(x0, x1), math.max(x0,
-        SPARK_LABEL_X + maxLabelChars * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
+        x0 + maxLabelChars * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
 end
 
 local function drawSparkline(x0, y0, x1, y1, slot)
@@ -593,8 +593,8 @@ local function drawSparkline(x0, y0, x1, y1, slot)
             lowLabelStyle = SMLSIZE + INVERS
         end
     end
-    lcd.drawText(SPARK_LABEL_X, y0, highText, highLabelStyle)
-    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
+    lcd.drawText(x0, y0, highText, highLabelStyle)
+    lcd.drawText(x0, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
     local plotX0 = sparkPlotStart(x0, x1, maxLabelChars)
     lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
     lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
