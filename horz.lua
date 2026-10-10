@@ -835,8 +835,8 @@ local function run(event)
             lcd.drawText(127, 9 + row * 17, bothText[i], SMLSIZE + RIGHT)
         end
     end
-    lcd.drawText(127, 51, string.format("%.0fP°", pitch), SMLSIZE + RIGHT)
-    lcd.drawText(127, 58, string.format("%.0fR°", roll), SMLSIZE + RIGHT)
+    lcd.drawText(128, 51, string.format("%.0f°P", pitch), SMLSIZE + RIGHT)
+    lcd.drawText(128, 58, string.format("%.0f°R", roll), SMLSIZE + RIGHT)
     if satelliteVisible then drawSatellite(satelliteX, satelliteY, fix) end
     if cfg.configSaveFailed then
         lcd.drawText(42, 0, "SAVE FAILED", SMLSIZE + INVERS)
