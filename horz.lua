@@ -1,5 +1,7 @@
+---graph scaling atm hat minimal bug, fixing it...soon
+
 -- ======================================================================================================================
--- LUA: Horizon & Telemetry Sensor Display for FrSky Sensors (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna Oct 10, 2026
+-- LUA: Horizon & Telemetry Sensor Display for FrSky Sensors (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna Oct 10, 2026 
 -- ======================================================================================================================
 --> This LUA script was created during the project: github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
 --> Files (all three must be placed in the same directory under /SCRIPTS/TELEMETRY/ on your transmitter):
