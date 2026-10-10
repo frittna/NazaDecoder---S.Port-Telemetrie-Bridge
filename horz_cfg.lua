@@ -1,6 +1,13 @@
+-- horz_cfg.lua: Config load/save and Sensor catalog for horz.lua / horz_menu.lua
+-- Briefly loaded by horz.lua at startup (and after exiting the menu) and then discarded;
+-- the menu loads it independently to save settings. Located in the same folder as horz.lua.
+
+-- GERMAN:
 -- horz_cfg.lua: Config laden/speichern und Sensor-Katalog fuer horz.lua / horz_menu.lua
 -- Wird von horz.lua beim Start (und nach dem Menue) kurz geladen und danach verworfen;
 -- das Menue laedt es selbst nach, um zu speichern. Liegt im selben Ordner wie horz.lua.
+
+--SKRIPT--
 
 -- V2: Das Leselimit 1024 Byte laesst Reserve fuer zusaetzliche Einstellungen.
 local CONFIG_READ_LIMIT = 2048
