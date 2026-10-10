@@ -855,8 +855,8 @@ local function drawMenu(event)
         lcd.drawText(78, line(5), "AXES", axesFlags + SMLSIZE)
         lcd.drawText(8, line(6), "ATTITUDE:" ..
             ((attitudeMode == 1) and "ANGLES" or "VECTOR"), attitudeFlags + SMLSIZE)
-        lcd.drawText(78, line(6), "VIEW:" ..
-            ((viewMode == 1) and "3D" or "Classic"), viewFlags + SMLSIZE)
+        lcd.drawText(78, line(6), "BOX:" ..
+            ((viewMode == 1) and "FULL" or "SIMPLE"), viewFlags + SMLSIZE)
     elseif isSensorPage() then
         local first, last
         if menuPage == 2 then
@@ -868,9 +868,9 @@ local function drawMenu(event)
         end
         local headerY = 8
         lcd.drawText(4, headerY, "Name", INVERS + SMLSIZE)
-        lcd.drawText(27, headerY, "Sorce", INVERS + SMLSIZE)
-        lcd.drawText(52, headerY, "Unit", INVERS + SMLSIZE)
-        lcd.drawText(69, headerY, "Preci", INVERS + SMLSIZE)
+        lcd.drawText(27, headerY, "Src", INVERS + SMLSIZE)
+        lcd.drawText(52, headerY, "Uni", INVERS + SMLSIZE)
+        lcd.drawText(69, headerY, "Prec", INVERS + SMLSIZE)
         lcd.drawText(94, headerY, "MM", INVERS + SMLSIZE)
         lcd.drawText(108, headerY, "ON", INVERS + SMLSIZE)
         for i = first, last do
@@ -897,7 +897,7 @@ local function drawMenu(event)
                 SMLSIZE + ((selected and selectedColumn == 3) and INVERS or 0))
             lcd.drawText(69, y, tostring(sPrecision[i]),
                 SMLSIZE + ((selected and selectedColumn == 4) and INVERS or 0))
-            lcd.drawText(92, y, "[M]",
+            lcd.drawText(92, y, " =",
                 SMLSIZE + ((selected and selectedColumn == 5) and INVERS or 0))
             lcd.drawText(107, y, (sOn[i] == 1) and "[X]" or "[ ]",
                 SMLSIZE + ((selected and selectedColumn == 6) and INVERS or 0))
@@ -906,15 +906,15 @@ local function drawMenu(event)
             local sourceRowY, graphRowY, altimeterRowY = 36, 43, 50
             local sourceSelected = selectedRow == 4
             lcd.drawText(0, sourceRowY, sourceSelected and ">" or " ", SMLSIZE)
-            lcd.drawText(1, sourceRowY, "inside Horiz:",
+            lcd.drawText(4, sourceRowY, "inside Horiz:",
                 SMLSIZE + ((sourceSelected and selectedColumn == 1) and INVERS or 0))
             lcd.drawText(68, sourceRowY, insideSource,
                 SMLSIZE + ((sourceSelected and selectedColumn == 1) and INVERS or 0))
-            lcd.drawText(105, sourceRowY, (insideEnabled == 1) and "[X]" or "[ ]",
+            lcd.drawText(105, sourceRowY, (insideEnabled == 1) and " [X]" or " [ ]",
                 SMLSIZE + ((sourceSelected and selectedColumn == 2) and INVERS or 0))
             local graphSelected = selectedRow == 5
             lcd.drawText(0, graphRowY, graphSelected and ">" or " ", SMLSIZE)
-            lcd.drawText(1, graphRowY, "Graph", SMLSIZE)
+            lcd.drawText(1, graphRowY, " Graph", SMLSIZE)
             lcd.drawText(29, graphRowY, (graphEnabled == 1) and "[X]" or "[ ]",
                 SMLSIZE + ((graphSelected and selectedColumn == 1) and INVERS or 0))
             lcd.drawText(48, graphRowY, "X-Time:", SMLSIZE)
@@ -922,18 +922,18 @@ local function drawMenu(event)
                 SMLSIZE + ((graphSelected and selectedColumn == 2) and INVERS or 0))
             local altimeterSelected = selectedRow == 6
             lcd.drawText(0, altimeterRowY, altimeterSelected and ">" or " ", SMLSIZE)
-            lcd.drawText(1, altimeterRowY, "Altimeter-Scale:",
+            lcd.drawText(4, altimeterRowY, "Altimeter-Scale:",
                 SMLSIZE + ((altimeterSelected and selectedColumn == 1) and INVERS or 0))
             lcd.drawText(83, altimeterRowY, altimeterSource,
                 SMLSIZE + ((altimeterSelected and selectedColumn == 1) and INVERS or 0))
-            if selectedRow == 5 and selectedColumn == 2 then
-                lcd.drawText(1, 57, "Graph? One L Sensor!", SMLSIZE)
+            if selectedRow == 5 and selectedColumn == 1 then
+                lcd.drawText(1, 57, " Graph?only1LSensor", SMLSIZE)
             end
         end
     else
         local rows = {
             "Forward: " .. fwdAxis, "Side: " .. sideAxis, "Down: " .. downAxis,
-            "View: " .. ((viewMode == 1) and "3D" or "Classic"),
+            "BOX: " .. ((viewMode == 1) and "FULL" or "SIMPLE"),
             "Attitude: " .. ((attitudeMode == 1) and "ANGLES" or "VECTOR"),
             "Calibrate Attitude"
         }
