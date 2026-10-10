@@ -570,20 +570,23 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
     local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
     local plotX0 = math.min(maxPlotX0, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
-    local topStyle = (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID
-    local bottomStyle = (fixedLow and windowLow < fixedLow) and DOTTED or SOLID
-    lcd.drawLine(plotX0, y0, x1, y0, topStyle, FORCE)
-    lcd.drawLine(plotX0, y1, x1, y1, bottomStyle, FORCE)
+    lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
+    lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
     if sparkCount < 2 then return end
-    local span, h = hi - lo, y1 - y0 - 1
+    local span, h = hi - lo, y1 - y0
     local px, py
+    local previousOutside = false
     for k = 0, sparkCount - 1 do
         local v = sparkSample(start, k)
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
-        local y = math.floor(y1 - 1 - ratio * h + 0.5)
+        local y = math.floor(y1 - ratio * h + 0.5)
+        local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
         local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
-        if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
+        if px then
+            lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
+        end
         px, py = x, y
+        previousOutside = outside
     end
 end
 local function drawLeftColumn()
