@@ -32,6 +32,7 @@ local SPARK_N = 40
 local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
 local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
 local SPARK_MIN_PLOT_WIDTH = 4
+local SPARK_LABEL_MAX_CHARS = 5
 local SPARK_LABEL_COMPACT_DIGITS = 6
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
@@ -559,13 +560,13 @@ local function sparkMaxPlotX0(x0, x1)
 end
 
 local function sparkMaxLabelChars(x0, x1)
-    return math.max(1, math.floor(
-        (sparkMaxPlotX0(x0, x1) - SPARK_LABEL_X - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH))
+    return math.max(1, math.min(SPARK_LABEL_MAX_CHARS, math.floor(
+        (sparkMaxPlotX0(x0, x1) - SPARK_LABEL_X - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH)))
 end
 
-local function sparkPlotStart(x0, x1, labelChars)
+local function sparkPlotStart(x0, x1, maxLabelChars)
     return math.min(sparkMaxPlotX0(x0, x1), math.max(x0,
-        SPARK_LABEL_X + labelChars * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
+        SPARK_LABEL_X + maxLabelChars * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
 end
 
 local function drawSparkline(x0, y0, x1, y1, slot)
@@ -581,6 +582,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     -- The live reading can advance beyond the buffered window between graph sampling ticks.
     local currentValue = slotValues[slot]
     -- Only sensors without stored MM limits invert labels when the live reading exceeds the window.
+    -- Compare raw telemetry values, even if rounding makes the displayed label look unchanged.
     local noFixedLimits = not fixedLow and not fixedHigh
     local numericCurrent = type(currentValue) == "number"
     local highLabelStyle, lowLabelStyle = SMLSIZE, SMLSIZE
@@ -593,8 +595,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     end
     lcd.drawText(SPARK_LABEL_X, y0, highText, highLabelStyle)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
-    local labelChars = math.max(charLen(highText), charLen(lowText))
-    local plotX0 = sparkPlotStart(x0, x1, labelChars)
+    local plotX0 = sparkPlotStart(x0, x1, maxLabelChars)
     lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
     lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
     if sparkCount < 2 then return end
