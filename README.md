@@ -87,7 +87,12 @@ In my configuration:
 
 ![](DOKU/Lua_Screen2.png)
 
-![](DOKU/Lua_Screen3.png)
+![](DOKU/Lua_Screen3.0.png)
+
+![](DOKU/Lua_Screen3.1.png)
+
+![](DOKU/Lua_Screen3.2.png)
+
 
 ![](DOKU/Lua_Screen4.png)
 
