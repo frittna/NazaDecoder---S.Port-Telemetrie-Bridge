@@ -1,3 +1,15 @@
+--ENGISCH:
+-- LUA: Horizon & Telemetry Sensor Display for FrSky Sensors (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna Oct 10, 2026
+--> This LUA script was created during the project: github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
+--> Files (all three must be placed in the same directory under /SCRIPTS/TELEMETRY/ on your transmitter):
+-->   horz.lua       Main view (this is the actual telemetry script, select only this one in your screen setup)
+-->   horz_menu.lua  Menu/Calibration/Config-Editor (loaded only upon a long press of the MENU button)
+-->   horz_cfg.lua   Config load/save + Sensor catalog (loaded dynamically and briefly when needed)
+--> The auxiliary files have names longer than 6 characters and are loaded via loadScript() using their full
+--> path. If they appear in your telemetry script selection menu: adjust the path in DIR and move both
+--> auxiliary files into a subfolder (e.g., /SCRIPTS/TELEMETRY/horz/).
+
+--DEUTSCH:
 -- LUA: Horizont & Telemetrie Sensor Display for FrSky Sensoren (QX7 - EdgeTX 2.10/2.11 BW Display) -- @frittna 10.Okt.2026
 --> Das LUA Script ist entstanden beim Projekt github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU
 --> Dateien (alle drei im selben Ordner /SCRIPTS/TELEMETRY/ auf dem Sender):
@@ -7,6 +19,8 @@
 --> Die Nebendateien haben mehr als 6 Zeichen im Namen und werden per loadScript() mit vollem
 --> Pfad geladen. Falls sie in der Telemetry-Script-Auswahl auftauchen: Pfad in DIR anpassen und
 --> beide in einen Unterordner legen (z.B. /SCRIPTS/TELEMETRY/horz/).
+
+--SKRIPT--
 
 local DEBUG_MEM = false -- true: zeigt collectgarbage("count") in KB (jetzt/Spitze/nach init)
 local DIR = "/SCRIPTS/TELEMETRY/"
@@ -714,7 +728,7 @@ local function run(event)
             satelliteVisible = true
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX + 1, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX + 2, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
     end
     if insideEnabled == 1 then
         local insideValue = 0
