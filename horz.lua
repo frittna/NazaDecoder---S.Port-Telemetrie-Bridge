@@ -501,26 +501,33 @@ local function drawBigValue(x, y, i, limit)
 end
 
 local function drawSparkline(x0, y0, x1, y1, lo, hi)
-    if lo == nil or hi == nil then
-        lo, hi = sparkBuf[1], sparkBuf[1]
-        for i = 2, sparkCount do
-            local v = sparkBuf[i]
-            if v < lo then lo = v elseif v > hi then hi = v end
+    local start = (sparkCount < SPARK_N) and 0 or sparkHead
+    local windowLow, windowHigh
+    for k = 0, sparkCount - 1 do
+        local v = sparkBuf[((start + k) % SPARK_N) + 1]
+        if windowLow == nil then
+            windowLow, windowHigh = v, v
+        else
+            if v < windowLow then windowLow = v end
+            if v > windowHigh then windowHigh = v end
         end
     end
-    lcd.drawLine(x0, y1, x1, y1, SOLID, FORCE)
-    if sparkCount < 2 then return end
-    local span, h = hi - lo, y1 - y0 - 1
-    local start = (sparkCount < SPARK_N) and 0 or sparkHead
+    if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
+    lcd.drawLine(x0, y0, x1, y0, (windowHigh > hi) and DOTTED or SOLID, FORCE)
+    lcd.drawLine(x0, y1, x1, y1, (windowLow < lo) and DOTTED or SOLID, FORCE)
+    if sparkCount < 2 then return windowLow, windowHigh end
+    local span, plotTop, plotBottom = hi - lo, y0 + 6, y1 - 7
+    local h = plotBottom - plotTop
     local px, py
     for k = 0, sparkCount - 1 do
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
-        local y = y1 - 1 - ratio * h
+        local y = plotBottom - ratio * h
         local x = x0 + k
         if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
         px, py = x, y
     end
+    return windowLow, windowHigh
 end
 local function drawLeftColumn()
     local n = leftN
@@ -585,11 +592,9 @@ local function drawLeftColumn()
             end
             if graphHigh <= graphLow then graphHigh = graphLow + 1 end
         end
-        drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
-        if graphLow ~= nil then
-            lcd.drawText(1, 34, string.format(valFmt[slot], graphHigh), SMLSIZE)
-            lcd.drawText(1, 54, string.format(valFmt[slot], graphLow), SMLSIZE)
-        end
+        local windowLow, windowHigh = drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
+        lcd.drawText(1, 34, string.format(valFmt[slot], windowHigh), SMLSIZE)
+        lcd.drawText(1, 54, string.format(valFmt[slot], windowLow), SMLSIZE)
     end
 end
 
