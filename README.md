@@ -37,6 +37,8 @@ RPM itself can be deleted later. Simply rename T1+T2 to "Sats" and "GFix".
 - The ATmega328P has only ONE serial interface; active GPS and serial monitor for testing cannot run simultaneously.
 
 ### LUA Script Instructions - Attitude Display and Telemetry Display Script - for SmartPort Transmitters like Taranis QX9 EdgeTX @ 2.11.7 (and compatible)
+- Files / installation: copy all three files `horz.lua`, `horz_menu.lua` and `horz_cfg.lua` into the same folder `/SCRIPTS/TELEMETRY/` on the transmitter. Only `horz.lua` is selected as the telemetry script in the screen setup; it contains just the main view. `horz_menu.lua` (menu, calibration, config editor) is loaded only on a long MENU press and unloaded again when the menu is closed; `horz_cfg.lua` (config load/save, sensor catalog) is loaded briefly at start and after the menu. The config format (`HORZCFG=2`) is unchanged. The side files are loaded with their full path; if they show up in the telemetry script list on your firmware, put them into a subfolder (e.g. `/SCRIPTS/TELEMETRY/horz/`) and adjust `DIR` at the top of `horz.lua`. Memory check: set `DEBUG_MEM = true` at the top of `horz.lua`; the top-left shows `current/peak/after-init` Lua memory in KB.
+
 --
 - `horz.lua` offers sources `ANGLES` (receiver values `Ptch`/`Roll`) and `VECTOR` (normalized `AccX/Y/Z`) in the menu. In vector mode, `fwd`, `side`, and `down` can be set with signs; `Calibrate` first determines the gravity axis and then the forward axis by tilting nose-down.
 
@@ -140,6 +142,8 @@ RPM selbst kann später gelöscht werden. T1+T2 einfach in "Sats" und GFix" umbe
 
 
 ### LUA Script Anleitung - Lageanzeige und Telemetie Display Skript - für SmartPort Sender wie Taranis QX9 EdgeTX @ 2.11.7 (und kompatible)
+- Dateien / Installation: Alle drei Dateien `horz.lua`, `horz_menu.lua` und `horz_cfg.lua` in denselben Ordner `/SCRIPTS/TELEMETRY/` auf den Sender kopieren. Im Screen-Setup wird nur `horz.lua` als Telemetrie-Script gewählt (nur Hauptansicht). `horz_menu.lua` (Menü, Kalibrierung, Config-Editor) wird erst bei langem MENU-Druck geladen und beim Verlassen wieder freigegeben; `horz_cfg.lua` (Config laden/speichern, Sensor-Katalog) wird nur kurz beim Start und nach dem Menü geladen. Das Config-Format (`HORZCFG=2`) ist unverändert. Die Nebendateien werden mit vollem Pfad geladen; falls sie in der Telemetrie-Script-Auswahl auftauchen, in einen Unterordner (z.B. `/SCRIPTS/TELEMETRY/horz/`) legen und `DIR` oben in `horz.lua` anpassen. Speicher messen: oben in `horz.lua` `DEBUG_MEM = true` setzen; links oben erscheint `aktuell/Spitze/nach-init` des Lua-Speichers in KB.
+
 --
 - `horz.lua` bietet im Menü die Quellen `ANGLES` (Empfängerwerte `Ptch`/`Roll`) und `VECTOR` (normierte `AccX/Y/Z`). Im Vektormodus sind `fwd`, `side` und `down` samt Vorzeichen einstellbar; `Calibrate` ermittelt zuerst die Schwerkraftachse und danach durch Nase-abwärts-Neigen die Vorwärtsachse.
 
