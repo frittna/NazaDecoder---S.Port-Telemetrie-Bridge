@@ -1,5 +1,5 @@
 // ****************************************************************************************************************************
-// NazaDecoder - S.Port Telemetry Bridge                                                                   @frittna Oct 8, 2026 
+// NazaDecoder - S.Port Telemetry Bridge                                                                   @frittna Oct 10, 2026 
 // Naza-M V1/V2 to FrSky SmartPort - Arduino
 // Integrates all GPS data and compass heading from DJI Naza-M V1/V2 -> to FrSky SmartPort telemetry data channel S.Port.
 //                           Version with additional MPU6000/6050 gyro chip for attitude/orientation data
