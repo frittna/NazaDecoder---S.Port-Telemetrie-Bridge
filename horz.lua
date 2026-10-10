@@ -32,6 +32,7 @@ local SPARK_N = 40
 local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
 local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
 local SPARK_MIN_PLOT_WIDTH = 4
+local SPARK_LABEL_COMPACT_DIGITS = 6
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
@@ -503,21 +504,41 @@ local function drawBigValue(x, y, i, limit)
     end
 end
 
+local function sparkScale(slot)
+    local fixedLow = (sMin[slot] ~= 0) and sMin[slot] or nil
+    local fixedHigh = (sMax[slot] ~= 0) and sMax[slot] or nil
+    local graphLow, graphHigh
+    if fixedLow or fixedHigh then
+        graphLow, graphHigh = sMin[slot], sMax[slot]
+        if graphLow == 0 then
+            graphLow = math.min(sessionMin[slot] or (graphHigh - 1), graphHigh - 1)
+        elseif graphHigh == 0 then
+            graphHigh = math.max(sessionMax[slot] or (graphLow + 1), graphLow + 1)
+        end
+        if graphHigh <= graphLow then graphHigh = graphLow + 1 end
+    end
+    return graphLow, graphHigh, fixedLow, fixedHigh
+end
+
 local function sparkLabel(value, slot, maxChars)
     local text = string.format(valFmt[slot], value)
     if charLen(text) <= maxChars then return text end
-    for digits = 6, 1, -1 do
+    for decimals = (cfg.sPrecision[slot] or 0) - 1, 0, -1 do
+        text = string.format("%." .. decimals .. "f", value)
+        if charLen(text) <= maxChars then return text end
+    end
+    -- Fall back to a compact significant-digit form only when fixed-point text cannot fit.
+    for digits = SPARK_LABEL_COMPACT_DIGITS, 1, -1 do
         text = string.format("%." .. digits .. "g", value)
         if charLen(text) <= maxChars then return text end
     end
     return string.format("%.1g", value)
 end
 
-local function drawSparkline(x0, y0, x1, y1, lo, hi, slot)
+local function drawSparkline(x0, y0, x1, y1, slot)
     if sparkCount == 0 or slot == nil then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
-    local fixedLow = (sMin[slot] ~= 0) and sMin[slot] or nil
-    local fixedHigh = (sMax[slot] ~= 0) and sMax[slot] or nil
+    local lo, hi, fixedLow, fixedHigh = sparkScale(slot)
     local windowLow, windowHigh
     for k = 0, sparkCount - 1 do
         local v = sparkBuf[((start + k) % SPARK_N) + 1]
@@ -606,17 +627,7 @@ local function drawLeftColumn()
             sparkHead = (sparkHead + 1) % SPARK_N
             if sparkCount < SPARK_N then sparkCount = sparkCount + 1 end
         end
-        local graphLow, graphHigh
-        if sMin[slot] ~= 0 or sMax[slot] ~= 0 then
-            graphLow, graphHigh = sMin[slot], sMax[slot]
-            if graphLow == 0 then
-                graphLow = math.min(sessionMin[slot] or (graphHigh - 1), graphHigh - 1)
-            elseif graphHigh == 0 then
-                graphHigh = math.max(sessionMax[slot] or (graphLow + 1), graphLow + 1)
-            end
-            if graphHigh <= graphLow then graphHigh = graphLow + 1 end
-        end
-        drawSparkline(1, 34, 43, 60, graphLow, graphHigh, slot)
+        drawSparkline(1, 34, 43, 60, slot)
     end
 end
 
