@@ -29,6 +29,10 @@ local SLOT_COUNT, STANDARD_SLOT_COUNT = 15, 9
 local CUSTOM_SLOT_FIRST = STANDARD_SLOT_COUNT + 1
 local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
+local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
+local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
+local SPARK_MIN_PLOT_WIDTH = 4
+local SPARK_LABEL_COMPACT_DIGITS = 6
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
@@ -500,26 +504,89 @@ local function drawBigValue(x, y, i, limit)
     end
 end
 
-local function drawSparkline(x0, y0, x1, y1, lo, hi)
-    if lo == nil or hi == nil then
-        lo, hi = sparkBuf[1], sparkBuf[1]
-        for i = 2, sparkCount do
-            local v = sparkBuf[i]
-            if v < lo then lo = v elseif v > hi then hi = v end
+local function sparkScale(slot)
+    local fixedLow = (sMin[slot] ~= 0) and sMin[slot] or nil
+    local fixedHigh = (sMax[slot] ~= 0) and sMax[slot] or nil
+    local graphLow, graphHigh
+    if fixedLow or fixedHigh then
+        graphLow, graphHigh = sMin[slot], sMax[slot]
+        if graphLow == 0 then
+            graphLow = math.min(sessionMin[slot] or (graphHigh - 1), graphHigh - 1)
+        elseif graphHigh == 0 then
+            graphHigh = math.max(sessionMax[slot] or (graphLow + 1), graphLow + 1)
+        end
+        if graphHigh <= graphLow then graphHigh = graphLow + 1 end
+    end
+    return graphLow, graphHigh, fixedLow, fixedHigh
+end
+
+local function sparkLabel(value, slot, maxChars)
+    local precision = cfg.sPrecision[slot] or 0
+    local text = string.format("%." .. precision .. "f", value)
+    if charLen(text) <= maxChars then return text end
+    for decimals = precision - 1, 0, -1 do
+        text = string.format("%." .. decimals .. "f", value)
+        if charLen(text) <= maxChars then return text end
+    end
+    -- Fall back to a compact significant-digit form only when fixed-point text cannot fit.
+    for digits = SPARK_LABEL_COMPACT_DIGITS, 1, -1 do
+        text = string.format("%." .. digits .. "g", value)
+        if charLen(text) <= maxChars then return text end
+    end
+    return string.format("%.1g", value)
+end
+
+local function sparkSample(start, k)
+    return sparkBuf[((start + k) % SPARK_N) + 1]
+end
+
+local function sparkWindowExtremes(start)
+    local windowLow, windowHigh
+    for k = 0, sparkCount - 1 do
+        local value = sparkSample(start, k)
+        if windowLow == nil then
+            windowLow, windowHigh = value, value
+        else
+            if value < windowLow then windowLow = value end
+            if value > windowHigh then windowHigh = value end
         end
     end
-    lcd.drawLine(x0, y1, x1, y1, SOLID, FORCE)
-    if sparkCount < 2 then return end
-    local span, h = hi - lo, y1 - y0 - 1
+    return windowLow, windowHigh
+end
+
+local function drawSparkline(x0, y0, x1, y1, slot)
+    if sparkCount == 0 or slot == nil then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
+    local lo, hi, fixedLow, fixedHigh = sparkScale(slot)
+    local windowLow, windowHigh = sparkWindowExtremes(start)
+    if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
+    local maxLabelChars = math.max(1, math.floor(
+        (x1 - SPARK_LABEL_X - SPARK_LABEL_PAD - SPARK_MIN_PLOT_WIDTH) / SPARK_LABEL_CHAR_WIDTH))
+    -- Unconfigured labels follow the session-derived scale edge used by the trace.
+    local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
+    local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
+    lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
+    lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
+    local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
+    local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
+    local plotX0 = math.min(maxPlotX0, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
+    --lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
+    --lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
+    if sparkCount < 2 then return end
+    local span, h = hi - lo, y1 - y0
     local px, py
+    local previousOutside = false
     for k = 0, sparkCount - 1 do
-        local v = sparkBuf[((start + k) % SPARK_N) + 1]
+        local v = sparkSample(start, k)
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
-        local y = y1 - 1 - ratio * h
-        local x = x0 + k
-        if px then lcd.drawLine(px, py, x, y, SOLID, FORCE) end
+        local y = math.floor(y1 - ratio * h + 0.5)
+        local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
+        local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
+        if px then
+            lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
+        end
         px, py = x, y
+        previousOutside = outside
     end
 end
 local function drawLeftColumn()
@@ -575,21 +642,7 @@ local function drawLeftColumn()
             sparkHead = (sparkHead + 1) % SPARK_N
             if sparkCount < SPARK_N then sparkCount = sparkCount + 1 end
         end
-        local graphLow, graphHigh
-        if sMin[slot] ~= 0 or sMax[slot] ~= 0 then
-            graphLow, graphHigh = sMin[slot], sMax[slot]
-            if graphLow == 0 then
-                graphLow = math.min(sessionMin[slot] or (graphHigh - 1), graphHigh - 1)
-            elseif graphHigh == 0 then
-                graphHigh = math.max(sessionMax[slot] or (graphLow + 1), graphLow + 1)
-            end
-            if graphHigh <= graphLow then graphHigh = graphLow + 1 end
-        end
-        drawSparkline(1, 34, 43, 60, graphLow, graphHigh)
-        if graphLow ~= nil then
-            lcd.drawText(1, 34, string.format(valFmt[slot], graphHigh), SMLSIZE)
-            lcd.drawText(1, 54, string.format(valFmt[slot], graphLow), SMLSIZE)
-        end
+        drawSparkline(1, 34, 43, 60, slot)
     end
 end
 
@@ -721,7 +774,7 @@ local function run(event)
     local now = getTime()
     local warningActive = updateGPSWarning(fix, now)
     local satelliteVisible = false
-    local satelliteX, satelliteY = cx - sizeW - 14, cy - sizeH - 5
+    local satelliteX, satelliteY = cx - sizeW - 14, cy - sizeH - 7
     if fix > 0 then
         local blinkOn = (now % 80) < 60
         local satsX = cx - sizeW - 7
@@ -729,7 +782,7 @@ local function run(event)
             satelliteVisible = true
         end
         local sats = math.max(0, math.floor((tonumber(getValue("Sats")) or 0) + 0.5))
-        lcd.drawText(satsX + 2, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE)
+        lcd.drawText(satsX + 7, cy - sizeH + 3, string.format("%.0f", sats), SMLSIZE + RIGHT)
     end
     if insideEnabled == 1 then
         local insideValue = 0
