@@ -31,6 +31,7 @@ local SLOT_NAME_VISIBLE = 4
 local SPARK_N = 40
 local SPARK_LABEL_CHAR_WIDTH, SPARK_LABEL_PAD = 5, 2 -- SMLSIZE character width and spacing in pixels
 local SPARK_LABEL_X, SPARK_LABEL_HEIGHT = 1, 6
+local SPARK_MIN_PLOT_WIDTH = 4
 local ALTITUDE_TICK_METERS, ALTITUDE_METERS_PER_HALFBOX = 2.5, 5
 -- Der Durchmesser enthaelt den Faktor 2 der Haversine-Distanz.
 local EARTH_MEAN_DIAMETER_METERS = 12742000
@@ -502,6 +503,16 @@ local function drawBigValue(x, y, i, limit)
     end
 end
 
+local function sparkLabel(value, slot, maxChars)
+    local text = string.format(valFmt[slot], value)
+    if charLen(text) <= maxChars then return text end
+    for digits = 6, 1, -1 do
+        text = string.format("%." .. digits .. "g", value)
+        if charLen(text) <= maxChars then return text end
+    end
+    return string.format("%.1g", value)
+end
+
 local function drawSparkline(x0, y0, x1, y1, lo, hi, slot)
     if sparkCount == 0 or slot == nil then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
@@ -518,12 +529,14 @@ local function drawSparkline(x0, y0, x1, y1, lo, hi, slot)
         end
     end
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
-    local highText = string.format(valFmt[slot], fixedHigh or windowHigh)
-    local lowText = string.format(valFmt[slot], fixedLow or windowLow)
+    local maxLabelChars = math.max(1, math.floor(
+        (x1 - SPARK_LABEL_X - SPARK_LABEL_PAD - SPARK_MIN_PLOT_WIDTH) / SPARK_LABEL_CHAR_WIDTH))
+    local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
+    local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
     lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
-    local plotX0 = math.min(x1, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
+    local plotX0 = math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD)
     lcd.drawLine(plotX0, y0, x1, y0,
         (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID, FORCE)
     lcd.drawLine(plotX0, y1, x1, y1,
