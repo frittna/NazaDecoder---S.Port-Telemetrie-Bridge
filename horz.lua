@@ -536,20 +536,29 @@ local function sparkLabel(value, slot, maxChars)
     return string.format("%.1g", value)
 end
 
+local function sparkSample(start, k)
+    return sparkBuf[((start + k) % SPARK_N) + 1]
+end
+
+local function sparkWindowExtremes(start)
+    local windowLow, windowHigh
+    for k = 0, sparkCount - 1 do
+        local value = sparkSample(start, k)
+        if windowLow == nil then
+            windowLow, windowHigh = value, value
+        else
+            if value < windowLow then windowLow = value end
+            if value > windowHigh then windowHigh = value end
+        end
+    end
+    return windowLow, windowHigh
+end
+
 local function drawSparkline(x0, y0, x1, y1, slot)
     if sparkCount == 0 or slot == nil then return end
     local start = (sparkCount < SPARK_N) and 0 or sparkHead
     local lo, hi, fixedLow, fixedHigh = sparkScale(slot)
-    local windowLow, windowHigh
-    for k = 0, sparkCount - 1 do
-        local v = sparkBuf[((start + k) % SPARK_N) + 1]
-        if windowLow == nil then
-            windowLow, windowHigh = v, v
-        else
-            if v < windowLow then windowLow = v end
-            if v > windowHigh then windowHigh = v end
-        end
-    end
+    local windowLow, windowHigh = sparkWindowExtremes(start)
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
     local maxLabelChars = math.max(1, math.floor(
         (x1 - SPARK_LABEL_X - SPARK_LABEL_PAD - SPARK_MIN_PLOT_WIDTH) / SPARK_LABEL_CHAR_WIDTH))
@@ -559,7 +568,8 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     lcd.drawText(SPARK_LABEL_X, y0, highText, SMLSIZE)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, SMLSIZE)
     local labelWidth = math.max(charLen(highText), charLen(lowText)) * SPARK_LABEL_CHAR_WIDTH
-    local plotX0 = math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD)
+    local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
+    local plotX0 = math.min(maxPlotX0, math.max(x0, SPARK_LABEL_X + labelWidth + SPARK_LABEL_PAD))
     local topStyle = (fixedHigh and windowHigh > fixedHigh) and DOTTED or SOLID
     local bottomStyle = (fixedLow and windowLow < fixedLow) and DOTTED or SOLID
     lcd.drawLine(plotX0, y0, x1, y0, topStyle, FORCE)
@@ -568,7 +578,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local span, h = hi - lo, y1 - y0 - 1
     local px, py
     for k = 0, sparkCount - 1 do
-        local v = sparkBuf[((start + k) % SPARK_N) + 1]
+        local v = sparkSample(start, k)
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
         local y = math.floor(y1 - 1 - ratio * h + 0.5)
         local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
