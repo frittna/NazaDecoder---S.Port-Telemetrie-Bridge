@@ -554,13 +554,18 @@ local function sparkWindowExtremes(start)
     return windowLow, windowHigh
 end
 
-local function sparkLabelLayout(x0, x1, labelChars)
-    local maxPlotX0 = math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
-    local maxLabelChars = math.max(1, math.floor(
-        (maxPlotX0 - SPARK_LABEL_X - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH))
-    local plotX0 = math.min(maxPlotX0, math.max(x0,
+local function sparkMaxPlotX0(x0, x1)
+    return math.max(x0, x1 - SPARK_MIN_PLOT_WIDTH)
+end
+
+local function sparkMaxLabelChars(x0, x1)
+    return math.max(1, math.floor(
+        (sparkMaxPlotX0(x0, x1) - SPARK_LABEL_X - SPARK_LABEL_PAD) / SPARK_LABEL_CHAR_WIDTH))
+end
+
+local function sparkPlotStart(x0, x1, labelChars)
+    return math.min(sparkMaxPlotX0(x0, x1), math.max(x0,
         SPARK_LABEL_X + labelChars * SPARK_LABEL_CHAR_WIDTH + SPARK_LABEL_PAD))
-    return maxLabelChars, plotX0
 end
 
 local function drawSparkline(x0, y0, x1, y1, slot)
@@ -569,7 +574,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     local lo, hi, fixedLow, fixedHigh = sparkScale(slot)
     local windowLow, windowHigh = sparkWindowExtremes(start)
     if lo == nil or hi == nil then lo, hi = windowLow, windowHigh end
-    local maxLabelChars = sparkLabelLayout(x0, x1, 0)
+    local maxLabelChars = sparkMaxLabelChars(x0, x1)
     -- Unconfigured labels follow the session-derived scale edge used by the trace.
     local highText = sparkLabel(fixedHigh or hi, slot, maxLabelChars)
     local lowText = sparkLabel(fixedLow or lo, slot, maxLabelChars)
@@ -589,7 +594,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
     lcd.drawText(SPARK_LABEL_X, y0, highText, highLabelStyle)
     lcd.drawText(SPARK_LABEL_X, y1 - SPARK_LABEL_HEIGHT, lowText, lowLabelStyle)
     local labelChars = math.max(charLen(highText), charLen(lowText))
-    local _, plotX0 = sparkLabelLayout(x0, x1, labelChars)
+    local plotX0 = sparkPlotStart(x0, x1, labelChars)
     lcd.drawLine(plotX0, y0, x1, y0, SOLID, FORCE)
     lcd.drawLine(plotX0, y1, x1, y1, SOLID, FORCE)
     if sparkCount < 2 then return end
@@ -601,7 +606,7 @@ local function drawSparkline(x0, y0, x1, y1, slot)
         local ratio = (span == 0) and 0.5 or math.max(0, math.min(1, (v - lo) / span))
         local y = math.floor(y1 - ratio * h + 0.5)
         local outside = (fixedHigh and v > fixedHigh) or (fixedLow and v < fixedLow) or false
-        -- Fixed spacing keeps the time scale constant; the trace reaches x1 only when full.
+        -- Layout reserves SPARK_MIN_PLOT_WIDTH; fixed spacing reaches x1 only when the buffer is full.
         local x = math.floor(plotX0 + k * (x1 - plotX0) / (SPARK_N - 1) + 0.5)
         if px then
             lcd.drawLine(px, py, x, y, (outside or previousOutside) and DOTTED or SOLID, FORCE)
