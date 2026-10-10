@@ -1,7 +1,7 @@
 ## Naza-M V1/V2 to FrSky SmartPort Telemetrie Bridge - Arduino + EDGE-TX LUA SCRIPT
 -  Project Site: https://github.com/frittna/NazaDecoder-S.Port-Telemetrie-Bridge-MPU @ 10.Okt.2026 
 
--->   runter scrollen für die deutsche Beschreibung  --  scroll down for german explanations   <--
+-->  scrollen für die deutsche Beschreibung  --  scroll down for german explanations   <--
   
 - Integrates all GPS data and compass heading from the DJI Naza-M V1/V2 into the native FrSky SmartPort telemetry data channel S.Port.
 
@@ -169,6 +169,5 @@ Bei Verwendung des Gyro-Arduino-Sketches diese Lua-Achsen im Menü auf `fwd=X+`,
 - Das Arduino-Sketch übernimmt GPS-Position, Höhe und Vario nur bei gültigem Fix ab 2D und gültigen Koordinaten; Höhen über 3000 m werden ignoriert.
 
 - Der Sketch wartet nach dem Einschalten 25 Sekunden, bevor er MPU-Daten liest. Danach mittelt er für etwa eine Sekunde den Gyro-Offset; das Modell muss während dieser Messung ruhig stehen. Die Lage wird anschließend aus der tatsächlichen Beschleunigungsrichtung initialisiert – eine schräge Einschaltlage wird nicht als Nulllage abgezogen.
-
 
 -- Beispiel Bilder: siehe oben
